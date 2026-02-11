@@ -15,8 +15,9 @@ const (
 
 // Common endpoint constants for message routing.
 const (
-	OnText     = "\atext"
-	OnCallback = "\acallback"
+	OnMessage  = "\amessage"  // любое входящее сообщение
+	OnText     = "\atext"     // текстовое сообщение (без команд)
+	OnCallback = "\acallback" // нажатие inline-кнопки
 	OnPhoto    = "\aphoto"
 	OnVideo    = "\avideo"
 	OnAudio    = "\aaudio"
@@ -97,12 +98,12 @@ func (b *Bot) ProcessUpdate(u Update) {
 
 	handler := b.match(u)
 	if handler == nil {
-		b.log("No handler found for update type=%s", u.UpdateType)
+		b.log("no handler for update type=%q", u.UpdateType)
 		return
 	}
 
 	if err := handler(c); err != nil {
-		b.log("Handler error: %v", err)
+		b.log("handler error: %v", err)
 		if b.onError != nil {
 			b.onError(err, c)
 		}
@@ -133,20 +134,20 @@ func (b *Bot) Handle(endpoint interface{}, handler HandlerFunc, m ...MiddlewareF
 }
 
 // match finds the appropriate handler for an update.
+// Priority order: callback > command > media type > OnText > OnMessage
 func (b *Bot) match(u Update) HandlerFunc {
-	// Проверяем callback первым
-	if u.CallbackQuery != nil {
+	// callback идёт первым, но только если это реальный callback (есть CallbackID)
+	if u.CallbackQuery != nil && u.CallbackQuery.CallbackID != "" {
 		if handler, ok := b.handlers[u.CallbackQuery.Payload]; ok {
 			return handler
 		}
 		return nil
 	}
 
-	// Затем проверяем message
 	if u.Message != nil {
 		text := u.Message.Text()
 
-		// Обработка команд
+		// команды имеют наивысший приоритет среди сообщений
 		if text != "" && text[0] == '/' {
 			cmd := text
 			if idx := strings.Index(text, " "); idx > 0 {
@@ -155,19 +156,52 @@ func (b *Bot) match(u Update) HandlerFunc {
 			if idx := strings.Index(cmd, "@"); idx > 0 {
 				cmd = cmd[:idx]
 			}
-
 			if handler, ok := b.handlers[cmd]; ok {
 				return handler
 			}
 		}
 
-		// Обработка текстовых сообщений
-		if handler, ok := b.handlers[OnText]; ok {
+		// роутинг по типу вложения
+		if key, ok := mediaEndpoint(u.Message); ok {
+			if handler, ok := b.handlers[key]; ok {
+				return handler
+			}
+		}
+
+		// текстовое сообщение
+		if text != "" {
+			if handler, ok := b.handlers[OnText]; ok {
+				return handler
+			}
+		}
+
+		// OnMessage — ловит всё что не поймали выше
+		if handler, ok := b.handlers[OnMessage]; ok {
 			return handler
 		}
 	}
 
 	return nil
+}
+
+// mediaEndpoint возвращает endpoint-константу для сообщения с вложением.
+func mediaEndpoint(msg *Message) (string, bool) {
+	if msg.Body == nil {
+		return "", false
+	}
+	for _, a := range msg.Body.Attachments {
+		switch a.Type {
+		case "image":
+			return OnPhoto, true
+		case "video":
+			return OnVideo, true
+		case "audio":
+			return OnAudio, true
+		case "file":
+			return OnDocument, true
+		}
+	}
+	return "", false
 }
 
 // Send sends a message to the specified recipient.

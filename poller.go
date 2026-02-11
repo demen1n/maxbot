@@ -37,14 +37,12 @@ func (p *LongPoller) Poll(b *Bot, updates chan Update, stop chan struct{}) {
 				continue
 			}
 
-			if len(upds) > 0 {
-				b.log("Received %d updates, new marker: %v", len(upds), marker)
-			}
-
 			for _, u := range upds {
 				updates <- u
 			}
 
+			// маркер обновляем всегда если он пришёл, даже при пустом списке апдейтов.
+			// без этого при пустом ответе будем каждый раз запрашивать с того же места.
 			if marker != nil {
 				p.Marker = marker
 			}

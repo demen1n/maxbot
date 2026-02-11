@@ -41,9 +41,37 @@ type Message struct {
 
 // MessageBody represents message content.
 type MessageBody struct {
-	Mid  string `json:"mid"`
-	Seq  int64  `json:"seq"`
-	Text string `json:"text"`
+	Mid         string              `json:"mid"`
+	Seq         int64               `json:"seq"`
+	Text        string              `json:"text"`
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
+	Markup      []MarkupElement     `json:"markup,omitempty"`
+	// link содержит информацию о цитируемом сообщении (reply/forward).
+	// в MAX API это поле называется "link".
+	Link *LinkedMessage `json:"link,omitempty"`
+}
+
+// MarkupElement представляет элемент форматирования текста (bold, italic и т.д.).
+type MarkupElement struct {
+	From   int    `json:"from"`
+	Length int    `json:"length"`
+	Type   string `json:"type"` // "emphasized", "strong", "strikethrough", etc.
+}
+
+// LinkedMessage представляет цитируемое или пересланное сообщение.
+type LinkedMessage struct {
+	// type может быть "reply" или "forward"
+	Type    string       `json:"type"`
+	Sender  *User        `json:"sender,omitempty"`
+	ChatID  int64        `json:"chat_id,omitempty"`
+	Message *MessageBody `json:"message,omitempty"`
+}
+
+// MessageAttachment представляет вложение в полученном сообщении.
+type MessageAttachment struct {
+	Type       string                 `json:"type"`
+	CallbackID string                 `json:"callback_id,omitempty"`
+	Payload    map[string]interface{} `json:"payload,omitempty"`
 }
 
 // RecipientInfo contains message recipient information.
@@ -59,6 +87,22 @@ func (m *Message) Text() string {
 		return m.Body.Text
 	}
 	return ""
+}
+
+// ReplyTo returns the message this message is a reply to, or nil.
+func (m *Message) ReplyTo() *LinkedMessage {
+	if m.Body == nil {
+		return nil
+	}
+	if m.Body.Link != nil && m.Body.Link.Type == "reply" {
+		return m.Body.Link
+	}
+	return nil
+}
+
+// IsReply reports whether the message is a reply to another message.
+func (m *Message) IsReply() bool {
+	return m.ReplyTo() != nil
 }
 
 // From returns message sender.
@@ -133,7 +177,7 @@ type ChatMember struct {
 	Status string `json:"status"`
 }
 
-// ChatAction represents a bot action in chat (typing, sending media, etc...).
+// ChatAction represents a bot action in chat (typing, sending media, etc).
 type ChatAction string
 
 const (

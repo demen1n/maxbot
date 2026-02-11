@@ -49,7 +49,7 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(respData))
+		return nil, fmt.Errorf("send failed %d: %s", resp.StatusCode, string(respData))
 	}
 
 	var result Message
@@ -185,6 +185,10 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int) ([]Update, *int6
 
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, nil, fmt.Errorf("failed to unmarshal updates: %v", err)
+	}
+
+	if len(response.Updates) > 0 {
+		b.log("received %d update(s)", len(response.Updates))
 	}
 
 	return response.Updates, response.Marker, nil
