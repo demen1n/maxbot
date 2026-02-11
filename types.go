@@ -1,6 +1,9 @@
 package maxbot
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // User represents a MAX user.
 type User struct {
@@ -37,6 +40,33 @@ type Message struct {
 	Sender        *User          `json:"sender,omitempty"`
 	Timestamp     int64          `json:"timestamp"`
 	Body          *MessageBody   `json:"body,omitempty"`
+
+	// ReplyTo содержит цитируемое сообщение если это реплай.
+	// заполняется автоматически из body.link при десериализации.
+	ReplyTo *LinkedMessage `json:"-"`
+}
+
+// UnmarshalJSON кастомный десериализатор — поднимает body.link в ReplyTo для удобства.
+func (m *Message) UnmarshalJSON(data []byte) error {
+	// временная структура без кастомного UnmarshalJSON чтобы избежать рекурсии
+	type plain struct {
+		RecipientInfo *RecipientInfo `json:"recipient,omitempty"`
+		Sender        *User          `json:"sender,omitempty"`
+		Timestamp     int64          `json:"timestamp"`
+		Body          *MessageBody   `json:"body,omitempty"`
+	}
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	m.RecipientInfo = p.RecipientInfo
+	m.Sender = p.Sender
+	m.Timestamp = p.Timestamp
+	m.Body = p.Body
+	if m.Body != nil && m.Body.Link != nil && m.Body.Link.Type == "reply" {
+		m.ReplyTo = m.Body.Link
+	}
+	return nil
 }
 
 // MessageBody represents message content.
@@ -46,9 +76,7 @@ type MessageBody struct {
 	Text        string              `json:"text"`
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
 	Markup      []MarkupElement     `json:"markup,omitempty"`
-	// link содержит информацию о цитируемом сообщении (reply/forward).
-	// в MAX API это поле называется "link".
-	Link *LinkedMessage `json:"link,omitempty"`
+	Link        *LinkedMessage      `json:"link,omitempty"`
 }
 
 // MarkupElement представляет элемент форматирования текста (bold, italic и т.д.).
@@ -59,12 +87,21 @@ type MarkupElement struct {
 }
 
 // LinkedMessage представляет цитируемое или пересланное сообщение.
+// Type может быть "reply" или "forward".
 type LinkedMessage struct {
-	// type может быть "reply" или "forward"
 	Type    string       `json:"type"`
 	Sender  *User        `json:"sender,omitempty"`
 	ChatID  int64        `json:"chat_id,omitempty"`
 	Message *MessageBody `json:"message,omitempty"`
+}
+
+// Text возвращает текст цитируемого сообщения.
+// Используется как msg.ReplyTo.Text
+func (l *LinkedMessage) Text() string {
+	if l.Message != nil {
+		return l.Message.Text
+	}
+	return ""
 }
 
 // MessageAttachment представляет вложение в полученном сообщении.
@@ -87,22 +124,6 @@ func (m *Message) Text() string {
 		return m.Body.Text
 	}
 	return ""
-}
-
-// ReplyTo returns the message this message is a reply to, or nil.
-func (m *Message) ReplyTo() *LinkedMessage {
-	if m.Body == nil {
-		return nil
-	}
-	if m.Body.Link != nil && m.Body.Link.Type == "reply" {
-		return m.Body.Link
-	}
-	return nil
-}
-
-// IsReply reports whether the message is a reply to another message.
-func (m *Message) IsReply() bool {
-	return m.ReplyTo() != nil
 }
 
 // From returns message sender.
