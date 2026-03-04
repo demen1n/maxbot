@@ -34,6 +34,7 @@ type Bot struct {
 
 	handlers map[string]HandlerFunc
 	onError  func(error, Context)
+	stop     chan struct{}
 }
 
 // Settings represents bot configuration.
@@ -76,16 +77,23 @@ func (b *Bot) log(format string, v ...interface{}) {
 	}
 }
 
-// Start begins the bot polling loop and blocks until stopped.
+// Start begins the bot polling loop and blocks until Stop() is called.
 func (b *Bot) Start() {
-	b.log("Bot started")
-	updates := make(chan Update)
-	stop := make(chan struct{})
+	b.stop = make(chan struct{})
+	updates := make(chan Update, 64)
 
-	go b.Poller.Poll(b, updates, stop)
+	b.log("Bot started")
+	go b.Poller.Poll(b, updates, b.stop)
 
 	for upd := range updates {
 		b.ProcessUpdate(upd)
+	}
+}
+
+// Stop signals the poller to stop and waits for the updates channel to close.
+func (b *Bot) Stop() {
+	if b.stop != nil {
+		close(b.stop)
 	}
 }
 
