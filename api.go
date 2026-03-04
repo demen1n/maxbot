@@ -326,6 +326,63 @@ func (b *Bot) UploadFile(fileType string, fileName string, fileData []byte) (str
 	return info.Token, nil
 }
 
+// GetMessages retrieves messages in a chat. chatID is required; count and
+// marker are optional (pass 0 / nil to omit).
+func (b *Bot) GetMessages(chatID int64, count int, marker *int64) ([]Message, *int64, error) {
+	url := fmt.Sprintf("/messages?chat_id=%d", chatID)
+	if count > 0 {
+		url += fmt.Sprintf("&count=%d", count)
+	}
+	if marker != nil {
+		url += fmt.Sprintf("&from=%d", *marker)
+	}
+
+	data, err := b.Raw("GET", url, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var response struct {
+		Messages []Message `json:"messages"`
+		Marker   *int64    `json:"marker"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, nil, err
+	}
+
+	return response.Messages, response.Marker, nil
+}
+
+// GetMessage retrieves a single message by its mid.
+func (b *Bot) GetMessage(mid string) (*Message, error) {
+	data, err := b.Raw("GET", "/messages/"+mid, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var msg Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, err
+	}
+
+	return &msg, nil
+}
+
+// GetVideoInfo returns video metadata by its token.
+func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
+	data, err := b.Raw("GET", "/videos/"+videoToken, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 // Raw makes a raw API request.
 func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) {
 	url := b.URL + endpoint
