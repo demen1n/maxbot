@@ -100,13 +100,18 @@ func (c *nativeContext) Payload() string {
 	return strings.TrimSpace(text[idx+1:])
 }
 
-// Send sends a message to the update sender.
+// Send sends a message to the current chat, falling back to the sender
+// for updates that carry no chat (e.g. bare callback queries).
 func (c *nativeContext) Send(what interface{}, opts ...interface{}) error {
-	sender := c.Sender()
-	if sender == nil {
-		return fmt.Errorf("sender not found")
+	var recipient Recipient
+	if chat := c.Chat(); chat != nil {
+		recipient = chat
+	} else if sender := c.Sender(); sender != nil {
+		recipient = sender
+	} else {
+		return fmt.Errorf("no recipient: neither chat nor sender available")
 	}
-	_, err := c.b.Send(sender, what, opts...)
+	_, err := c.b.Send(recipient, what, opts...)
 	return err
 }
 
