@@ -226,6 +226,9 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 		case *SendOptions:
 			msg.Format = o.Format
 			msg.Attachments = o.Attachments
+			if o.ReplyToMid != "" {
+				msg.Link = &linkedRef{Type: "reply", Mid: o.ReplyToMid}
+			}
 		case *ReplyMarkup:
 			if len(o.InlineKeyboard) > 0 {
 				msg.Attachments = append(msg.Attachments, Attachment{

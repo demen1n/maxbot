@@ -30,6 +30,10 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 		body["attachments"] = msg.Attachments
 	}
 
+	if msg.Link != nil {
+		body["link"] = msg.Link
+	}
+
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, err

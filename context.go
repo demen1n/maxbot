@@ -110,8 +110,18 @@ func (c *nativeContext) Send(what interface{}, opts ...interface{}) error {
 	return err
 }
 
-// Reply is an alias for Send.
+// Reply sends a message as a reply to the incoming message.
 func (c *nativeContext) Reply(what interface{}, opts ...interface{}) error {
+	msg := c.Message()
+	if msg == nil {
+		return c.Send(what, opts...)
+	}
+	mid := msg.Mid()
+	if mid == "" {
+		return c.Send(what, opts...)
+	}
+	replyOpt := &SendOptions{ReplyToMid: mid}
+	opts = append([]interface{}{replyOpt}, opts...)
 	return c.Send(what, opts...)
 }
 

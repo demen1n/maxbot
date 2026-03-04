@@ -5,6 +5,7 @@ type SendOptions struct {
 	Text        string
 	Format      string
 	Attachments []Attachment
+	ReplyToMid  string // mid of message to reply to
 }
 
 // CallbackResponse represents a response to callback query.
@@ -28,6 +29,13 @@ type SendMessage struct {
 	Text        string       `json:"text"`
 	Format      string       `json:"format,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	Link        *linkedRef   `json:"link,omitempty"`
+}
+
+// linkedRef is used to attach a reply/forward link to an outgoing message.
+type linkedRef struct {
+	Type string `json:"type"`
+	Mid  string `json:"mid"`
 }
 
 // EditMessage represents a message edit request.
