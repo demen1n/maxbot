@@ -120,7 +120,13 @@ func (b *Bot) Handle(endpoint interface{}, handler HandlerFunc, m ...MiddlewareF
 	case string:
 		key = end
 	case *InlineButton:
-		key = end.Data
+		// Match on Payload — that is what CallbackQuery.Payload carries.
+		// Data is a routing alias; fall back to it when Payload is empty.
+		if end.Payload != "" {
+			key = end.Payload
+		} else {
+			key = end.Data
+		}
 	default:
 		panic(fmt.Sprintf("maxbot: unsupported endpoint type %T", endpoint))
 	}
