@@ -127,9 +127,9 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 	return &result, nil
 }
 
-// editMessage edits a message via API (legacy method).
+// editMessage edits a message via API using StoredMessage integer ID.
 func (b *Bot) editMessage(edit *EditMessage) (*Message, error) {
-	path := fmt.Sprintf("/messages/%d", edit.MessageID)
+	path := fmt.Sprintf("/messages?message_id=%d", edit.MessageID)
 	data, err := b.Raw("PUT", path, edit)
 	if err != nil {
 		return nil, err
