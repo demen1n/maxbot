@@ -258,9 +258,7 @@ func (b *Bot) DeleteCommands() error {
 // GetUploadURL gets a URL for uploading files.
 // fileType can be: "image", "video", "audio", "file"
 func (b *Bot) GetUploadURL(fileType string) (*UploadInfo, error) {
-	url := fmt.Sprintf("%s/uploads?type=%s", b.URL, fileType)
-
-	data, err := b.Raw("POST", url, nil)
+	data, err := b.Raw("POST", "/uploads?type="+fileType, nil)
 	if err != nil {
 		return nil, err
 	}
