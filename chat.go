@@ -5,6 +5,23 @@ import (
 	"fmt"
 )
 
+// GetChats returns all group chats the bot participates in.
+func (b *Bot) GetChats() ([]Chat, error) {
+	data, err := b.Raw("GET", "/chats", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Chats []Chat `json:"chats"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+
+	return response.Chats, nil
+}
+
 // GetChat retrieves chat information by ID.
 func (b *Bot) GetChat(chatID int64) (*Chat, error) {
 	url := fmt.Sprintf("/chats/%d", chatID)
@@ -19,6 +36,64 @@ func (b *Bot) GetChat(chatID int64) (*Chat, error) {
 	}
 
 	return &chat, nil
+}
+
+// UpdateChat modifies a group chat (title, description, icon, etc).
+// fields is a map of fields to update, e.g. {"title": "New title"}.
+func (b *Bot) UpdateChat(chatID int64, fields map[string]interface{}) (*Chat, error) {
+	url := fmt.Sprintf("/chats/%d", chatID)
+	data, err := b.Raw("PATCH", url, fields)
+	if err != nil {
+		return nil, err
+	}
+
+	var chat Chat
+	if err := json.Unmarshal(data, &chat); err != nil {
+		return nil, err
+	}
+
+	return &chat, nil
+}
+
+// DeleteChat removes a group chat.
+func (b *Bot) DeleteChat(chatID int64) error {
+	url := fmt.Sprintf("/chats/%d", chatID)
+	_, err := b.Raw("DELETE", url, nil)
+	return err
+}
+
+// GetChatMemberMe returns the bot's own membership info in the chat.
+func (b *Bot) GetChatMemberMe(chatID int64) (*ChatMember, error) {
+	url := fmt.Sprintf("/chats/%d/members/me", chatID)
+	data, err := b.Raw("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var member ChatMember
+	if err := json.Unmarshal(data, &member); err != nil {
+		return nil, err
+	}
+
+	return &member, nil
+}
+
+// GetChatMembers returns all members of a chat.
+func (b *Bot) GetChatMembers(chatID int64) ([]ChatMember, error) {
+	url := fmt.Sprintf("/chats/%d/members", chatID)
+	data, err := b.Raw("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Members []ChatMember `json:"members"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+
+	return response.Members, nil
 }
 
 // GetChatMember gets information about a specific chat member.

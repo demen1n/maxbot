@@ -34,6 +34,7 @@ type Bot struct {
 
 	handlers map[string]HandlerFunc
 	onError  func(error, Context)
+	stop     chan struct{}
 }
 
 // Settings represents bot configuration.
@@ -59,8 +60,15 @@ func NewBot(s Settings) (*Bot, error) {
 		s.Poller = &LongPoller{Timeout: DefaultTimeout}
 	}
 
+	token := s.Token
+	if len(token) > 7 && token[:7] == "Bearer " {
+		// already prefixed — use as-is
+	} else {
+		token = "Bearer " + token
+	}
+
 	return &Bot{
-		Token:    s.Token,
+		Token:    token,
 		URL:      s.URL,
 		Poller:   s.Poller,
 		Client:   &http.Client{Timeout: 30 * time.Second},
@@ -76,16 +84,23 @@ func (b *Bot) log(format string, v ...interface{}) {
 	}
 }
 
-// Start begins the bot polling loop and blocks until stopped.
+// Start begins the bot polling loop and blocks until Stop() is called.
 func (b *Bot) Start() {
-	b.log("Bot started")
-	updates := make(chan Update)
-	stop := make(chan struct{})
+	b.stop = make(chan struct{})
+	updates := make(chan Update, 64)
 
-	go b.Poller.Poll(b, updates, stop)
+	b.log("Bot started")
+	go b.Poller.Poll(b, updates, b.stop)
 
 	for upd := range updates {
 		b.ProcessUpdate(upd)
+	}
+}
+
+// Stop signals the poller to stop and waits for the updates channel to close.
+func (b *Bot) Stop() {
+	if b.stop != nil {
+		close(b.stop)
 	}
 }
 
@@ -120,7 +135,13 @@ func (b *Bot) Handle(endpoint interface{}, handler HandlerFunc, m ...MiddlewareF
 	case string:
 		key = end
 	case *InlineButton:
-		key = end.Data
+		// Match on Payload — that is what CallbackQuery.Payload carries.
+		// Data is a routing alias; fall back to it when Payload is empty.
+		if end.Payload != "" {
+			key = end.Payload
+		} else {
+			key = end.Data
+		}
 	default:
 		panic(fmt.Sprintf("maxbot: unsupported endpoint type %T", endpoint))
 	}
@@ -139,6 +160,9 @@ func (b *Bot) match(u Update) HandlerFunc {
 	// callback идёт первым, но только если это реальный callback (есть CallbackID)
 	if u.CallbackQuery != nil && u.CallbackQuery.CallbackID != "" {
 		if handler, ok := b.handlers[u.CallbackQuery.Payload]; ok {
+			return handler
+		}
+		if handler, ok := b.handlers[OnCallback]; ok {
 			return handler
 		}
 		return nil
@@ -207,11 +231,7 @@ func mediaEndpoint(msg *Message) (string, bool) {
 // Send sends a message to the specified recipient.
 // Returns the sent message or an error.
 func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Message, error) {
-	recipientID := to.Recipient()
-
-	msg := &SendMessage{
-		ChatID: recipientID,
-	}
+	msg := newSendMessage(to)
 
 	switch v := what.(type) {
 	case string:
@@ -227,6 +247,9 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 		case *SendOptions:
 			msg.Format = o.Format
 			msg.Attachments = o.Attachments
+			if o.ReplyToMid != "" {
+				msg.Link = &linkedRef{Type: "reply", Mid: o.ReplyToMid}
+			}
 		case *ReplyMarkup:
 			if len(o.InlineKeyboard) > 0 {
 				msg.Attachments = append(msg.Attachments, Attachment{
@@ -268,8 +291,27 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) (*Messag
 
 // Delete deletes a message.
 func (b *Bot) Delete(msg Editable) error {
-	msgID, chatID := msg.MessageSig()
-	return b.deleteMessage(msgID, chatID)
+	if m, ok := msg.(*Message); ok {
+		mid := m.Mid()
+		if mid == "" {
+			return fmt.Errorf("message mid is empty")
+		}
+		return b.deleteMessage(mid)
+	}
+	msgID, _ := msg.MessageSig()
+	return b.deleteMessage(fmt.Sprintf("%d", msgID))
+}
+
+// newSendMessage creates a SendMessage with the correct recipient field set.
+func newSendMessage(to Recipient) *SendMessage {
+	msg := &SendMessage{}
+	switch to.(type) {
+	case *Chat:
+		msg.ChatID = to.Recipient()
+	default:
+		msg.UserID = to.Recipient()
+	}
+	return msg
 }
 
 // HandlerFunc represents a handler function for processing updates.

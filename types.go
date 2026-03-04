@@ -170,10 +170,11 @@ type Update struct {
 
 // CallbackQuery represents a callback button press.
 type CallbackQuery struct {
-	CallbackID string `json:"callback_id"`
-	Timestamp  int64  `json:"timestamp"`
-	User       *User  `json:"user"`
-	Payload    string `json:"payload"`
+	CallbackID string   `json:"callback_id"`
+	Timestamp  int64    `json:"timestamp"`
+	User       *User    `json:"user"`
+	Payload    string   `json:"payload"`
+	Message    *Message `json:"message,omitempty"`
 }
 
 // StoredMessage is a lightweight message reference for database storage.

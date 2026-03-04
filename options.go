@@ -5,6 +5,7 @@ type SendOptions struct {
 	Text        string
 	Format      string
 	Attachments []Attachment
+	ReplyToMid  string // mid of message to reply to
 }
 
 // CallbackResponse represents a response to callback query.
@@ -21,11 +22,20 @@ type Attachment struct {
 }
 
 // SendMessage represents an outgoing message request.
+// Exactly one of UserID or ChatID must be set.
 type SendMessage struct {
-	ChatID      string       `json:"chat_id"`
+	UserID      string       // recipient user ID (private chats)
+	ChatID      string       // recipient chat/channel ID
 	Text        string       `json:"text"`
 	Format      string       `json:"format,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	Link        *linkedRef   `json:"link,omitempty"`
+}
+
+// linkedRef is used to attach a reply/forward link to an outgoing message.
+type linkedRef struct {
+	Type string `json:"type"`
+	Mid  string `json:"mid"`
 }
 
 // EditMessage represents a message edit request.

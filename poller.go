@@ -91,7 +91,13 @@ func (w *Webhook) Poll(b *Bot, updates chan Update, stop chan struct{}) {
 			return
 		}
 
-		updates <- update
+		select {
+		case updates <- update:
+		default:
+			// Buffer full: dispatch in background so the HTTP response
+			// returns immediately and MAX doesn't retry.
+			go func(u Update) { updates <- u }(update)
+		}
 		rw.WriteHeader(http.StatusOK)
 	})
 

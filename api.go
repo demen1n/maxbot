@@ -10,7 +10,13 @@ import (
 
 // sendMessage sends a message via MAX API.
 func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
-	url := fmt.Sprintf("%s/messages?user_id=%s", b.URL, msg.ChatID)
+	var recipientParam string
+	if msg.ChatID != "" {
+		recipientParam = "chat_id=" + msg.ChatID
+	} else {
+		recipientParam = "user_id=" + msg.UserID
+	}
+	url := fmt.Sprintf("%s/messages?%s", b.URL, recipientParam)
 
 	body := map[string]interface{}{
 		"text": msg.Text,
@@ -22,6 +28,10 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 
 	if len(msg.Attachments) > 0 {
 		body["attachments"] = msg.Attachments
+	}
+
+	if msg.Link != nil {
+		body["link"] = msg.Link
 	}
 
 	data, err := json.Marshal(body)
@@ -121,10 +131,13 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 	return &result, nil
 }
 
-// editMessage edits a message via API (legacy method).
+// editMessage edits a message via API using StoredMessage integer ID.
 func (b *Bot) editMessage(edit *EditMessage) (*Message, error) {
-	path := fmt.Sprintf("/messages/%d", edit.MessageID)
-	data, err := b.Raw("PUT", path, edit)
+	path := fmt.Sprintf("/messages?message_id=%d", edit.MessageID)
+	body := map[string]interface{}{
+		"text": edit.Text,
+	}
+	data, err := b.Raw("PUT", path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -137,10 +150,9 @@ func (b *Bot) editMessage(edit *EditMessage) (*Message, error) {
 	return &result, nil
 }
 
-// deleteMessage deletes a message via API.
-func (b *Bot) deleteMessage(msgID int, chatID int64) error {
-	path := fmt.Sprintf("/messages/%d", msgID)
-	_, err := b.Raw("DELETE", path, nil)
+// deleteMessage deletes a message via API using its string mid.
+func (b *Bot) deleteMessage(mid string) error {
+	_, err := b.Raw("DELETE", "/messages?message_id="+mid, nil)
 	return err
 }
 
@@ -200,8 +212,16 @@ func (b *Bot) respondCallback(callbackID string, resp *CallbackResponse) error {
 		"callback_id": callbackID,
 	}
 
-	if resp != nil && resp.Text != "" {
-		payload["notification"] = resp.Text
+	if resp != nil {
+		if resp.Text != "" {
+			payload["notification"] = resp.Text
+		}
+		if resp.ShowAlert {
+			payload["show_alert"] = resp.ShowAlert
+		}
+		if resp.URL != "" {
+			payload["url"] = resp.URL
+		}
 	}
 
 	_, err := b.Raw("POST", "/answers", payload)
@@ -258,9 +278,7 @@ func (b *Bot) DeleteCommands() error {
 // GetUploadURL gets a URL for uploading files.
 // fileType can be: "image", "video", "audio", "file"
 func (b *Bot) GetUploadURL(fileType string) (*UploadInfo, error) {
-	url := fmt.Sprintf("%s/uploads?type=%s", b.URL, fileType)
-
-	data, err := b.Raw("POST", url, nil)
+	data, err := b.Raw("POST", "/uploads?type="+fileType, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -309,6 +327,63 @@ func (b *Bot) UploadFile(fileType string, fileName string, fileData []byte) (str
 	}
 
 	return info.Token, nil
+}
+
+// GetMessages retrieves messages in a chat. chatID is required; count and
+// marker are optional (pass 0 / nil to omit).
+func (b *Bot) GetMessages(chatID int64, count int, marker *int64) ([]Message, *int64, error) {
+	url := fmt.Sprintf("/messages?chat_id=%d", chatID)
+	if count > 0 {
+		url += fmt.Sprintf("&count=%d", count)
+	}
+	if marker != nil {
+		url += fmt.Sprintf("&from=%d", *marker)
+	}
+
+	data, err := b.Raw("GET", url, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var response struct {
+		Messages []Message `json:"messages"`
+		Marker   *int64    `json:"marker"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, nil, err
+	}
+
+	return response.Messages, response.Marker, nil
+}
+
+// GetMessage retrieves a single message by its mid.
+func (b *Bot) GetMessage(mid string) (*Message, error) {
+	data, err := b.Raw("GET", "/messages/"+mid, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var msg Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, err
+	}
+
+	return &msg, nil
+}
+
+// GetVideoInfo returns video metadata by its token.
+func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
+	data, err := b.Raw("GET", "/videos/"+videoToken, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // Raw makes a raw API request.

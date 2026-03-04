@@ -17,10 +17,8 @@ func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 		},
 	}
 
-	msg := &SendMessage{
-		ChatID:      to.Recipient(),
-		Attachments: []Attachment{attachment},
-	}
+	msg := newSendMessage(to)
+	msg.Attachments = []Attachment{attachment}
 
 	if opts != nil {
 		msg.Text = opts.Text
@@ -48,10 +46,8 @@ func (v *Video) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 		},
 	}
 
-	msg := &SendMessage{
-		ChatID:      to.Recipient(),
-		Attachments: []Attachment{attachment},
-	}
+	msg := newSendMessage(to)
+	msg.Attachments = []Attachment{attachment}
 
 	if opts != nil {
 		msg.Text = opts.Text
@@ -79,10 +75,8 @@ func (a *Audio) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 		},
 	}
 
-	msg := &SendMessage{
-		ChatID:      to.Recipient(),
-		Attachments: []Attachment{attachment},
-	}
+	msg := newSendMessage(to)
+	msg.Attachments = []Attachment{attachment}
 
 	if opts != nil {
 		msg.Text = opts.Text
@@ -109,10 +103,8 @@ func (d *Document) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, erro
 		},
 	}
 
-	msg := &SendMessage{
-		ChatID:      to.Recipient(),
-		Attachments: []Attachment{attachment},
-	}
+	msg := newSendMessage(to)
+	msg.Attachments = []Attachment{attachment}
 
 	if opts != nil {
 		msg.Text = opts.Text

@@ -52,10 +52,12 @@ func (c *nativeContext) Sender() *User {
 }
 
 // Chat returns the chat where the update occurred.
-// For callbacks, chat information may not be available.
 func (c *nativeContext) Chat() *Chat {
 	if c.update.Message != nil {
 		return c.update.Message.Chat()
+	}
+	if cb := c.update.CallbackQuery; cb != nil && cb.Message != nil {
+		return cb.Message.Chat()
 	}
 	return nil
 }
@@ -100,18 +102,33 @@ func (c *nativeContext) Payload() string {
 	return strings.TrimSpace(text[idx+1:])
 }
 
-// Send sends a message to the update sender.
+// Send sends a message to the current chat, falling back to the sender
+// for updates that carry no chat (e.g. bare callback queries).
 func (c *nativeContext) Send(what interface{}, opts ...interface{}) error {
-	sender := c.Sender()
-	if sender == nil {
-		return fmt.Errorf("sender not found")
+	var recipient Recipient
+	if chat := c.Chat(); chat != nil {
+		recipient = chat
+	} else if sender := c.Sender(); sender != nil {
+		recipient = sender
+	} else {
+		return fmt.Errorf("no recipient: neither chat nor sender available")
 	}
-	_, err := c.b.Send(sender, what, opts...)
+	_, err := c.b.Send(recipient, what, opts...)
 	return err
 }
 
-// Reply is an alias for Send.
+// Reply sends a message as a reply to the incoming message.
 func (c *nativeContext) Reply(what interface{}, opts ...interface{}) error {
+	msg := c.Message()
+	if msg == nil {
+		return c.Send(what, opts...)
+	}
+	mid := msg.Mid()
+	if mid == "" {
+		return c.Send(what, opts...)
+	}
+	replyOpt := &SendOptions{ReplyToMid: mid}
+	opts = append([]interface{}{replyOpt}, opts...)
 	return c.Send(what, opts...)
 }
 
