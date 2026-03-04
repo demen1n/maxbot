@@ -205,8 +205,16 @@ func (b *Bot) respondCallback(callbackID string, resp *CallbackResponse) error {
 		"callback_id": callbackID,
 	}
 
-	if resp != nil && resp.Text != "" {
-		payload["notification"] = resp.Text
+	if resp != nil {
+		if resp.Text != "" {
+			payload["notification"] = resp.Text
+		}
+		if resp.ShowAlert {
+			payload["show_alert"] = resp.ShowAlert
+		}
+		if resp.URL != "" {
+			payload["url"] = resp.URL
+		}
 	}
 
 	_, err := b.Raw("POST", "/answers", payload)
