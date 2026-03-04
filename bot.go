@@ -141,6 +141,9 @@ func (b *Bot) match(u Update) HandlerFunc {
 		if handler, ok := b.handlers[u.CallbackQuery.Payload]; ok {
 			return handler
 		}
+		if handler, ok := b.handlers[OnCallback]; ok {
+			return handler
+		}
 		return nil
 	}
 
