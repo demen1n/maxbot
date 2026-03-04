@@ -143,10 +143,9 @@ func (b *Bot) editMessage(edit *EditMessage) (*Message, error) {
 	return &result, nil
 }
 
-// deleteMessage deletes a message via API.
-func (b *Bot) deleteMessage(msgID int, chatID int64) error {
-	path := fmt.Sprintf("/messages/%d", msgID)
-	_, err := b.Raw("DELETE", path, nil)
+// deleteMessage deletes a message via API using its string mid.
+func (b *Bot) deleteMessage(mid string) error {
+	_, err := b.Raw("DELETE", "/messages?message_id="+mid, nil)
 	return err
 }
 

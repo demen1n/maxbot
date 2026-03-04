@@ -264,8 +264,15 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) (*Messag
 
 // Delete deletes a message.
 func (b *Bot) Delete(msg Editable) error {
-	msgID, chatID := msg.MessageSig()
-	return b.deleteMessage(msgID, chatID)
+	if m, ok := msg.(*Message); ok {
+		mid := m.Mid()
+		if mid == "" {
+			return fmt.Errorf("message mid is empty")
+		}
+		return b.deleteMessage(mid)
+	}
+	msgID, _ := msg.MessageSig()
+	return b.deleteMessage(fmt.Sprintf("%d", msgID))
 }
 
 // newSendMessage creates a SendMessage with the correct recipient field set.
