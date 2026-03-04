@@ -52,10 +52,12 @@ func (c *nativeContext) Sender() *User {
 }
 
 // Chat returns the chat where the update occurred.
-// For callbacks, chat information may not be available.
 func (c *nativeContext) Chat() *Chat {
 	if c.update.Message != nil {
 		return c.update.Message.Chat()
+	}
+	if cb := c.update.CallbackQuery; cb != nil && cb.Message != nil {
+		return cb.Message.Chat()
 	}
 	return nil
 }
