@@ -10,7 +10,13 @@ import (
 
 // sendMessage sends a message via MAX API.
 func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
-	url := fmt.Sprintf("%s/messages?user_id=%s", b.URL, msg.ChatID)
+	var recipientParam string
+	if msg.ChatID != "" {
+		recipientParam = "chat_id=" + msg.ChatID
+	} else {
+		recipientParam = "user_id=" + msg.UserID
+	}
+	url := fmt.Sprintf("%s/messages?%s", b.URL, recipientParam)
 
 	body := map[string]interface{}{
 		"text": msg.Text,

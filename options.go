@@ -21,8 +21,10 @@ type Attachment struct {
 }
 
 // SendMessage represents an outgoing message request.
+// Exactly one of UserID or ChatID must be set.
 type SendMessage struct {
-	ChatID      string       `json:"chat_id"`
+	UserID      string       // recipient user ID (private chats)
+	ChatID      string       // recipient chat/channel ID
 	Text        string       `json:"text"`
 	Format      string       `json:"format,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`

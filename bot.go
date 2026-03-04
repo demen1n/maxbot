@@ -207,11 +207,7 @@ func mediaEndpoint(msg *Message) (string, bool) {
 // Send sends a message to the specified recipient.
 // Returns the sent message or an error.
 func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Message, error) {
-	recipientID := to.Recipient()
-
-	msg := &SendMessage{
-		ChatID: recipientID,
-	}
+	msg := newSendMessage(to)
 
 	switch v := what.(type) {
 	case string:
@@ -270,6 +266,18 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) (*Messag
 func (b *Bot) Delete(msg Editable) error {
 	msgID, chatID := msg.MessageSig()
 	return b.deleteMessage(msgID, chatID)
+}
+
+// newSendMessage creates a SendMessage with the correct recipient field set.
+func newSendMessage(to Recipient) *SendMessage {
+	msg := &SendMessage{}
+	switch to.(type) {
+	case *Chat:
+		msg.ChatID = to.Recipient()
+	default:
+		msg.UserID = to.Recipient()
+	}
+	return msg
 }
 
 // HandlerFunc represents a handler function for processing updates.
