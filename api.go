@@ -254,17 +254,9 @@ func (b *Bot) SetCommands(commands []BotCommand) error {
 		return err
 	}
 
-	var result struct {
-		Success bool   `json:"success"`
-		Message string `json:"message,omitempty"`
-	}
-
-	if err := json.Unmarshal(data, &result); err != nil {
+	var user User
+	if err := json.Unmarshal(data, &user); err != nil {
 		return err
-	}
-
-	if !result.Success {
-		return fmt.Errorf("failed to set commands: %s", result.Message)
 	}
 
 	return nil
