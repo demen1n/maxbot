@@ -7,13 +7,30 @@ type ReplyMarkup struct {
 	InlineKeyboard [][]InlineButton `json:"inline_keyboard,omitempty"`
 }
 
+// Intent controls the visual style of a button.
+type Intent string
+
+const (
+	IntentDefault  Intent = "default"
+	IntentPositive Intent = "positive"
+	IntentNegative Intent = "negative"
+)
+
 // InlineButton represents an inline keyboard button.
 type InlineButton struct {
 	Text    string `json:"text"`
 	Type    string `json:"type"`
+	Intent  Intent `json:"intent,omitempty"`
 	Payload string `json:"payload,omitempty"`
 	URL     string `json:"url,omitempty"`
-	Data    string `json:"-"` // используется для роутинга
+	// OpenApp fields
+	App        string `json:"app,omitempty"`
+	AppPayload string `json:"app_payload,omitempty"`
+	ContactID  int64  `json:"contact_id,omitempty"`
+	// Geolocation fields
+	Quick bool `json:"quick,omitempty"`
+
+	Data string `json:"-"` // used for routing only
 }
 
 // Row adds a row of buttons to the keyboard.
@@ -45,4 +62,38 @@ func (r *ReplyMarkup) URL(text, url string) InlineButton {
 		Type: "link",
 		URL:  url,
 	}
+}
+
+// Contact creates a button that requests the user's phone number.
+func (r *ReplyMarkup) Contact(text string) InlineButton {
+	return InlineButton{
+		Text: text,
+		Type: "request_contact",
+	}
+}
+
+// Geolocation creates a button that requests the user's location.
+// If quick is true, the location is sent immediately without a confirmation dialog.
+func (r *ReplyMarkup) Geolocation(text string, quick bool) InlineButton {
+	return InlineButton{
+		Text:  text,
+		Type:  "request_geo_location",
+		Quick: quick,
+	}
+}
+
+// OpenApp creates a button that opens a MAX mini-app.
+// app is the app identifier, payload is passed to the app on launch,
+// contactID optionally pins the launch to a specific contact.
+func (r *ReplyMarkup) OpenApp(text, app, payload string, contactID int64) InlineButton {
+	btn := InlineButton{
+		Text:       text,
+		Type:       "open_app",
+		App:        app,
+		AppPayload: payload,
+	}
+	if contactID != 0 {
+		btn.ContactID = contactID
+	}
+	return btn
 }
