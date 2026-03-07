@@ -60,15 +60,8 @@ func NewBot(s Settings) (*Bot, error) {
 		s.Poller = &LongPoller{Timeout: DefaultTimeout}
 	}
 
-	token := s.Token
-	if len(token) > 7 && token[:7] == "Bearer " {
-		// already prefixed — use as-is
-	} else {
-		token = "Bearer " + token
-	}
-
 	return &Bot{
-		Token:    token,
+		Token:    s.Token,
 		URL:      s.URL,
 		Poller:   s.Poller,
 		Client:   &http.Client{Timeout: 30 * time.Second},
