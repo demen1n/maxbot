@@ -63,17 +63,19 @@ func (b *Bot) DeleteWebhook() error {
 	return nil
 }
 
-// GetWebhook returns current webhook information.
-func (b *Bot) GetWebhook() (*WebhookInfo, error) {
+// GetWebhook returns all active webhook subscriptions.
+func (b *Bot) GetWebhook() ([]WebhookInfo, error) {
 	data, err := b.Raw("GET", "/subscriptions", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var info WebhookInfo
-	if err := json.Unmarshal(data, &info); err != nil {
+	var response struct {
+		Subscriptions []WebhookInfo `json:"subscriptions"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err
 	}
 
-	return &info, nil
+	return response.Subscriptions, nil
 }

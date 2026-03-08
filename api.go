@@ -3,12 +3,16 @@ package maxbot
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
-// sendMessage sends a message via MAX API.
+const maxRetries = 4
+
+// sendMessage sends a message via MAX API, retrying on attachment-not-ready errors.
 func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	var recipientParam string
 	if msg.ChatID != "" {
@@ -21,114 +25,129 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	body := map[string]interface{}{
 		"text": msg.Text,
 	}
-
 	if msg.Format != "" {
 		body["format"] = msg.Format
 	}
-
 	if len(msg.Attachments) > 0 {
 		body["attachments"] = msg.Attachments
 	}
-
 	if msg.Link != nil {
 		body["link"] = msg.Link
 	}
 
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second)
+		}
+
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+
+		req, err := http.NewRequest("POST", url, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", b.Token)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := b.Client.Do(req)
+		if err != nil {
+			return nil, &NetworkError{Op: "sendMessage", Err: err}
+		}
+
+		respData, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			apiErr := parseAPIError(resp.StatusCode, respData)
+			if apiErr.IsAttachmentNotReady() {
+				lastErr = apiErr
+				continue
+			}
+			return nil, apiErr
+		}
+
+		var result Message
+		if err := json.Unmarshal(respData, &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
 	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Authorization", b.Token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := b.Client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("send failed %d: %s", resp.StatusCode, string(respData))
-	}
-
-	var result Message
-	if err := json.Unmarshal(respData, &result); err != nil {
-		return nil, err
-	}
-
-	return &result, nil
+	return nil, lastErr
 }
 
-// editMessageByMid edits a message using MAX message ID (mid).
+// editMessageByMid edits a message using MAX message ID (mid), retrying on attachment-not-ready errors.
 func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}) (*Message, error) {
 	if mid == "" {
 		return nil, fmt.Errorf("message mid is empty")
 	}
 
 	body := map[string]interface{}{}
-
 	switch v := what.(type) {
 	case string:
 		body["text"] = v
 	default:
 		return nil, fmt.Errorf("unsupported editable type: %T", what)
 	}
-
 	for _, opt := range opts {
-		if o, ok := opt.(*SendOptions); ok {
-			if o.Format != "" {
-				body["format"] = o.Format
-			}
+		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
+			body["format"] = o.Format
 		}
 	}
 
 	url := fmt.Sprintf("%s/messages?message_id=%s", b.URL, mid)
 
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second)
+		}
+
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+
+		req, err := http.NewRequest("PUT", url, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", b.Token)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := b.Client.Do(req)
+		if err != nil {
+			return nil, &NetworkError{Op: "editMessage", Err: err}
+		}
+
+		respData, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			apiErr := parseAPIError(resp.StatusCode, respData)
+			if apiErr.IsAttachmentNotReady() {
+				lastErr = apiErr
+				continue
+			}
+			return nil, apiErr
+		}
+
+		var result Message
+		if err := json.Unmarshal(respData, &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
 	}
-
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Authorization", b.Token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := b.Client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(respData))
-	}
-
-	var result Message
-	if err := json.Unmarshal(respData, &result); err != nil {
-		return nil, err
-	}
-
-	return &result, nil
+	return nil, lastErr
 }
 
 // editMessage edits a message via API using StoredMessage integer ID.
@@ -187,7 +206,7 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int) ([]Update, *int6
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(data))
+		return nil, nil, parseAPIError(resp.StatusCode, data)
 	}
 
 	var response struct {
@@ -413,8 +432,42 @@ func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(data))
+		return nil, parseAPIError(resp.StatusCode, data)
 	}
 
 	return data, nil
+}
+
+// parseAPIError parses an error response body into an *APIError.
+// The MAX API returns {"code": "error.code", "message": "human readable"} on errors.
+func parseAPIError(statusCode int, body []byte) *APIError {
+	var resp struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	apiErr := &APIError{Code: statusCode}
+	if json.Unmarshal(body, &resp) == nil && resp.Code != "" {
+		apiErr.Message = resp.Code
+		apiErr.Details = resp.Message
+	} else {
+		apiErr.Message = string(body)
+	}
+	return apiErr
+}
+
+// IsAPIError reports whether err is an *APIError and optionally checks HTTP status codes.
+func IsAPIError(err error, codes ...int) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if len(codes) == 0 {
+		return true
+	}
+	for _, c := range codes {
+		if apiErr.Code == c {
+			return true
+		}
+	}
+	return false
 }
