@@ -150,13 +150,13 @@ func (b *Bot) DemoteChatMember(chatID int64, userID int64) error {
 }
 
 // KickChatMember removes a user from the chat.
-func (b *Bot) KickChatMember(chatID int64, userID int64) error {
-	url := fmt.Sprintf("/chats/%d/members", chatID)
-	payload := map[string]interface{}{
-		"user_id": userID,
+// Set block=true to also ban the user from rejoining.
+func (b *Bot) KickChatMember(chatID, userID int64, block bool) error {
+	endpoint := fmt.Sprintf("/chats/%d/members?user_id=%d", chatID, userID)
+	if block {
+		endpoint += "&block=true"
 	}
-
-	_, err := b.Raw("DELETE", url, payload)
+	_, err := b.Raw("DELETE", endpoint, nil)
 	return err
 }
 
