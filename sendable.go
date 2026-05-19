@@ -26,88 +26,65 @@ func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	return b.sendMessage(msg)
 }
 
-// Video represents a video attachment.
+// Video represents an uploaded video ready to send.
+// Obtain via Bot.UploadMedia("video", ...).
 type Video struct {
-	FileID   string `json:"file_id"`
-	Width    int    `json:"width"`
-	Height   int    `json:"height"`
-	Duration int    `json:"duration"`
-	Token    string `json:"token,omitempty"`
+	UploadedInfo
 }
 
 // Send implements Sendable interface for Video.
 func (v *Video) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
 	attachment := Attachment{
-		Type: "video",
-		Payload: map[string]interface{}{
-			"token": v.Token,
-		},
+		Type:    "video",
+		Payload: map[string]interface{}{"token": v.Token},
 	}
-
 	msg := newSendMessage(to)
 	msg.Attachments = []Attachment{attachment}
-
 	if opts != nil {
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 	}
-
 	return b.sendMessage(msg)
 }
 
-// Audio represents an audio file.
+// Audio represents an uploaded audio file ready to send.
+// Obtain via Bot.UploadMedia("audio", ...).
 type Audio struct {
-	FileID    string `json:"file_id"`
-	Duration  int    `json:"duration"`
-	Title     string `json:"title,omitempty"`
-	Performer string `json:"performer,omitempty"`
-	Token     string `json:"token,omitempty"`
+	UploadedInfo
 }
 
 // Send implements Sendable interface for Audio.
 func (a *Audio) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
 	attachment := Attachment{
-		Type: "audio",
-		Payload: map[string]interface{}{
-			"token": a.Token,
-		},
+		Type:    "audio",
+		Payload: map[string]interface{}{"token": a.Token},
 	}
-
 	msg := newSendMessage(to)
 	msg.Attachments = []Attachment{attachment}
-
 	if opts != nil {
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 	}
-
 	return b.sendMessage(msg)
 }
 
-// Document represents a document file.
+// Document represents an uploaded file ready to send.
+// Obtain via Bot.UploadMedia("file", ...).
 type Document struct {
-	FileID   string `json:"file_id"`
-	FileName string `json:"file_name"`
-	FileSize int    `json:"file_size"`
-	Token    string `json:"token,omitempty"`
+	UploadedInfo
 }
 
 // Send implements Sendable interface for Document.
 func (d *Document) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
 	attachment := Attachment{
-		Type: "file",
-		Payload: map[string]interface{}{
-			"token": d.Token,
-		},
+		Type:    "file",
+		Payload: map[string]interface{}{"token": d.Token},
 	}
-
 	msg := newSendMessage(to)
 	msg.Attachments = []Attachment{attachment}
-
 	if opts != nil {
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 	}
-
 	return b.sendMessage(msg)
 }
