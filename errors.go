@@ -28,7 +28,7 @@ func (e *APIError) Error() string {
 // IsAttachmentNotReady reports whether the error means the uploaded attachment
 // has not been processed by MAX yet and the request should be retried.
 func (e *APIError) IsAttachmentNotReady() bool {
-	return e.Message == "attachment.not.ready"
+	return e.ErrorText == "attachment.not.ready" || e.Message == "attachment.not.ready"
 }
 
 // NetworkError wraps a network-level failure.
