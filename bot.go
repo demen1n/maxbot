@@ -15,13 +15,26 @@ const (
 
 // Common endpoint constants for message routing.
 const (
-	OnMessage  = "\amessage"  // любое входящее сообщение
-	OnText     = "\atext"     // текстовое сообщение (без команд)
-	OnCallback = "\acallback" // нажатие inline-кнопки
+	OnMessage  = "\amessage"  // any incoming message (message_created fallback)
+	OnText     = "\atext"     // plain text message
+	OnCallback = "\acallback" // inline button press (catch-all)
 	OnPhoto    = "\aphoto"
 	OnVideo    = "\avideo"
 	OnAudio    = "\aaudio"
 	OnDocument = "\adocument"
+
+	// Update-type specific endpoints.
+	OnMessageEdited    = "\amessage_edited"
+	OnMessageRemoved   = "\amessage_removed"
+	OnBotStarted       = "\abot_started"
+	OnBotAdded         = "\abot_added"
+	OnBotRemoved       = "\abot_removed"
+	OnBotStopped       = "\abot_stopped"
+	OnUserAdded        = "\auser_added"
+	OnUserRemoved      = "\auser_removed"
+	OnChatTitleChanged = "\achat_title_changed"
+	OnDialogRemoved    = "\adialog_removed"
+	OnDialogCleared    = "\adialog_cleared"
 )
 
 // Bot represents a MAX bot instance.
@@ -148,9 +161,9 @@ func (b *Bot) Handle(endpoint interface{}, handler HandlerFunc, m ...MiddlewareF
 }
 
 // match finds the appropriate handler for an update.
-// Priority order: callback > command > media type > OnText > OnMessage
+// Priority order: callback > specific update type > command > media > OnText > OnMessage
 func (b *Bot) match(u Update) HandlerFunc {
-	// callback идёт первым, но только если это реальный callback (есть CallbackID)
+	// Callback queries.
 	if u.CallbackQuery != nil && u.CallbackQuery.CallbackID != "" {
 		if handler, ok := b.handlers[u.CallbackQuery.Payload]; ok {
 			return handler
@@ -161,10 +174,17 @@ func (b *Bot) match(u Update) HandlerFunc {
 		return nil
 	}
 
+	// Message updates (message_created, message_edited).
 	if u.Message != nil {
+		// Edited messages get their own handler first.
+		if u.UpdateType == UpdateMessageEdited {
+			if handler, ok := b.handlers[OnMessageEdited]; ok {
+				return handler
+			}
+		}
+
 		text := u.Message.Text()
 
-		// команды имеют наивысший приоритет среди сообщений
 		if text != "" && text[0] == '/' {
 			cmd := text
 			if idx := strings.Index(text, " "); idx > 0 {
@@ -178,22 +198,52 @@ func (b *Bot) match(u Update) HandlerFunc {
 			}
 		}
 
-		// роутинг по типу вложения
 		if key, ok := mediaEndpoint(u.Message); ok {
 			if handler, ok := b.handlers[key]; ok {
 				return handler
 			}
 		}
 
-		// текстовое сообщение
 		if text != "" {
 			if handler, ok := b.handlers[OnText]; ok {
 				return handler
 			}
 		}
 
-		// OnMessage — ловит всё что не поймали выше
 		if handler, ok := b.handlers[OnMessage]; ok {
+			return handler
+		}
+
+		return nil
+	}
+
+	// Non-message update types.
+	var endpointKey string
+	switch u.UpdateType {
+	case UpdateMessageRemoved:
+		endpointKey = OnMessageRemoved
+	case UpdateBotStarted:
+		endpointKey = OnBotStarted
+	case UpdateBotAdded:
+		endpointKey = OnBotAdded
+	case UpdateBotRemoved:
+		endpointKey = OnBotRemoved
+	case UpdateBotStopped:
+		endpointKey = OnBotStopped
+	case UpdateUserAdded:
+		endpointKey = OnUserAdded
+	case UpdateUserRemoved:
+		endpointKey = OnUserRemoved
+	case UpdateChatTitleChanged:
+		endpointKey = OnChatTitleChanged
+	case UpdateDialogRemoved:
+		endpointKey = OnDialogRemoved
+	case UpdateDialogCleared:
+		endpointKey = OnDialogCleared
+	}
+
+	if endpointKey != "" {
+		if handler, ok := b.handlers[endpointKey]; ok {
 			return handler
 		}
 	}

@@ -162,6 +162,23 @@ func (m *Message) Mid() string {
 	return ""
 }
 
+// Update type constants.
+const (
+	UpdateMessageCreated   = "message_created"
+	UpdateMessageEdited    = "message_edited"
+	UpdateMessageRemoved   = "message_removed"
+	UpdateMessageCallback  = "message_callback"
+	UpdateBotAdded         = "bot_added"
+	UpdateBotRemoved       = "bot_removed"
+	UpdateBotStarted       = "bot_started"
+	UpdateBotStopped       = "bot_stopped"
+	UpdateUserAdded        = "user_added"
+	UpdateUserRemoved      = "user_removed"
+	UpdateChatTitleChanged = "chat_title_changed"
+	UpdateDialogRemoved    = "dialog_removed"
+	UpdateDialogCleared    = "dialog_cleared"
+)
+
 // Update represents an incoming update from MAX API.
 type Update struct {
 	UpdateType    string         `json:"update_type"`
@@ -169,6 +186,23 @@ type Update struct {
 	UserLocale    string         `json:"user_locale,omitempty"`
 	Message       *Message       `json:"message,omitempty"`
 	CallbackQuery *CallbackQuery `json:"callback,omitempty"`
+
+	// Fields for bot_started, bot_added, bot_removed, bot_stopped,
+	// user_added, user_removed, chat_title_changed.
+	ChatID    int64  `json:"chat_id,omitempty"`
+	User      *User  `json:"user,omitempty"`
+	Payload   string `json:"payload,omitempty"` // bot_started deeplink
+	Title     string `json:"title,omitempty"`   // chat_title_changed
+
+	// Fields for message_removed.
+	MessageID string `json:"message_id,omitempty"`
+	UserID    int64  `json:"user_id,omitempty"`
+
+	// Fields for user_added.
+	InviterID int64 `json:"inviter_id,omitempty"`
+
+	// Fields for user_added / user_removed.
+	IsChannel bool `json:"is_channel,omitempty"`
 }
 
 // CallbackQuery represents a callback button press.
