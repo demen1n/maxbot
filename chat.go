@@ -5,21 +5,46 @@ import (
 	"fmt"
 )
 
-// GetChats returns all group chats the bot participates in.
-func (b *Bot) GetChats() ([]Chat, error) {
-	data, err := b.Raw("GET", "/chats", nil)
+// GetChats returns group chats the bot participates in.
+// count limits results (0 = server default); marker is the pagination cursor (*nil = start).
+// Returns chats and the next page marker (nil when no more pages).
+func (b *Bot) GetChats(count int, marker *int64) ([]Chat, *int64, error) {
+	path := "/chats"
+	sep := "?"
+	if count > 0 {
+		path += sep + fmt.Sprintf("count=%d", count)
+		sep = "&"
+	}
+	if marker != nil {
+		path += sep + fmt.Sprintf("marker=%d", *marker)
+	}
+	data, err := b.Raw("GET", path, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response struct {
-		Chats []Chat `json:"chats"`
+		Chats  []Chat `json:"chats"`
+		Marker *int64 `json:"marker"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response.Chats, nil
+	return response.Chats, response.Marker, nil
+}
+
+// GetChatByLink retrieves chat information by its public link (e.g. "mygroup").
+func (b *Bot) GetChatByLink(link string) (*Chat, error) {
+	data, err := b.Raw("GET", "/chats/"+link, nil)
+	if err != nil {
+		return nil, err
+	}
+	var chat Chat
+	if err := json.Unmarshal(data, &chat); err != nil {
+		return nil, err
+	}
+	return &chat, nil
 }
 
 // GetChat retrieves chat information by ID.
@@ -78,21 +103,52 @@ func (b *Bot) GetChatMemberMe(chatID int64) (*ChatMember, error) {
 	return &member, nil
 }
 
-// GetChatMembers returns all members of a chat.
-func (b *Bot) GetChatMembers(chatID int64) ([]ChatMember, error) {
-	url := fmt.Sprintf("/chats/%d/members", chatID)
-	data, err := b.Raw("GET", url, nil)
+// GetChatMembers returns members of a chat with optional pagination.
+func (b *Bot) GetChatMembers(chatID, count int64, marker *int64) ([]ChatMember, *int64, error) {
+	path := fmt.Sprintf("/chats/%d/members", chatID)
+	sep := "?"
+	if count > 0 {
+		path += sep + fmt.Sprintf("count=%d", count)
+		sep = "&"
+	}
+	if marker != nil {
+		path += sep + fmt.Sprintf("marker=%d", *marker)
+	}
+	data, err := b.Raw("GET", path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var response struct {
+		Members []ChatMember `json:"members"`
+		Marker  *int64       `json:"marker"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, nil, err
+	}
+
+	return response.Members, response.Marker, nil
+}
+
+// GetSpecificChatMembers retrieves info for a specific set of users in the chat.
+func (b *Bot) GetSpecificChatMembers(chatID int64, userIDs []int64) ([]ChatMember, error) {
+	path := fmt.Sprintf("/chats/%d/members?", chatID)
+	for i, id := range userIDs {
+		if i > 0 {
+			path += "&"
+		}
+		path += fmt.Sprintf("user_ids=%d", id)
+	}
+	data, err := b.Raw("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
-
 	var response struct {
 		Members []ChatMember `json:"members"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err
 	}
-
 	return response.Members, nil
 }
 
@@ -113,32 +169,46 @@ func (b *Bot) GetChatMember(chatID int64, userID int64) (*ChatMember, error) {
 }
 
 // GetChatAdmins gets the list of chat administrators.
-func (b *Bot) GetChatAdmins(chatID int64) ([]ChatMember, error) {
+// Returns members and an optional pagination marker.
+func (b *Bot) GetChatAdmins(chatID int64) ([]ChatMember, *int64, error) {
 	url := fmt.Sprintf("/chats/%d/members/admins", chatID)
 	data, err := b.Raw("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response struct {
-		Admins []ChatMember `json:"admins"`
+		Members []ChatMember `json:"members"`
+		Marker  *int64       `json:"marker"`
 	}
 
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response.Admins, nil
+	return response.Members, response.Marker, nil
 }
 
-// PromoteChatMember promotes a user to administrator.
-func (b *Bot) PromoteChatMember(chatID int64, userID int64) error {
-	url := fmt.Sprintf("/chats/%d/members/admins", chatID)
-	payload := map[string]interface{}{
-		"user_id": userID,
+// PromoteChatMember grants admin rights to a user.
+// perms lists the permissions to grant; if empty, all permissions are granted.
+func (b *Bot) PromoteChatMember(chatID, userID int64, perms ...ChatAdminPermission) error {
+	if len(perms) == 0 {
+		perms = []ChatAdminPermission{
+			PermReadAllMessages,
+			PermAddRemoveMembers,
+			PermAddAdmins,
+			PermChangeChatInfo,
+			PermPinMessage,
+			PermWrite,
+		}
 	}
-
-	_, err := b.Raw("POST", url, payload)
+	endpoint := fmt.Sprintf("/chats/%d/members/admins", chatID)
+	payload := map[string]interface{}{
+		"admins": []map[string]interface{}{
+			{"user_id": userID, "permissions": perms},
+		},
+	}
+	_, err := b.Raw("POST", endpoint, payload)
 	return err
 }
 
@@ -150,13 +220,13 @@ func (b *Bot) DemoteChatMember(chatID int64, userID int64) error {
 }
 
 // KickChatMember removes a user from the chat.
-func (b *Bot) KickChatMember(chatID int64, userID int64) error {
-	url := fmt.Sprintf("/chats/%d/members", chatID)
-	payload := map[string]interface{}{
-		"user_id": userID,
+// Set block=true to also ban the user from rejoining.
+func (b *Bot) KickChatMember(chatID, userID int64, block bool) error {
+	endpoint := fmt.Sprintf("/chats/%d/members?user_id=%d", chatID, userID)
+	if block {
+		endpoint += "&block=true"
 	}
-
-	_, err := b.Raw("DELETE", url, payload)
+	_, err := b.Raw("DELETE", endpoint, nil)
 	return err
 }
 
@@ -179,13 +249,16 @@ func (b *Bot) LeaveChat(chatID int64) error {
 }
 
 // PinMessage pins a message in the chat.
-func (b *Bot) PinMessage(chatID int64, messageID string) error {
-	url := fmt.Sprintf("/chats/%d/pin", chatID)
+// notify controls whether members are notified; pass nil to use server default.
+func (b *Bot) PinMessage(chatID int64, messageID string, notify *bool) error {
+	endpoint := fmt.Sprintf("/chats/%d/pin", chatID)
 	payload := map[string]interface{}{
 		"message_id": messageID,
 	}
-
-	_, err := b.Raw("PUT", url, payload)
+	if notify != nil {
+		payload["notify"] = *notify
+	}
+	_, err := b.Raw("PUT", endpoint, payload)
 	return err
 }
 

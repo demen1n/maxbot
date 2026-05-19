@@ -6,11 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const maxRetries = 4
+
+// addVersionParam appends v=APIVersion to a path that may already have query params.
+func addVersionParam(path string) string {
+	if strings.Contains(path, "?") {
+		return path + "&v=" + APIVersion
+	}
+	return path + "?v=" + APIVersion
+}
 
 // sendMessage sends a message via MAX API, retrying on attachment-not-ready errors.
 func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
@@ -20,7 +30,7 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	} else {
 		recipientParam = "user_id=" + msg.UserID
 	}
-	url := fmt.Sprintf("%s/messages?%s", b.URL, recipientParam)
+	url := fmt.Sprintf("%s%s", b.URL, addVersionParam("/messages?"+recipientParam))
 
 	body := map[string]interface{}{
 		"text": msg.Text,
@@ -55,7 +65,8 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 
 		resp, err := b.Client.Do(req)
 		if err != nil {
-			return nil, &NetworkError{Op: "sendMessage", Err: err}
+			lastErr = &NetworkError{Op: "sendMessage", Err: err}
+			continue
 		}
 
 		respData, err := io.ReadAll(resp.Body)
@@ -73,19 +84,21 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 			return nil, apiErr
 		}
 
-		var result Message
-		if err := json.Unmarshal(respData, &result); err != nil {
+		var wrapper struct {
+			Message Message `json:"message"`
+		}
+		if err := json.Unmarshal(respData, &wrapper); err != nil {
 			return nil, err
 		}
-		return &result, nil
+		return &wrapper.Message, nil
 	}
 	return nil, lastErr
 }
 
 // editMessageByMid edits a message using MAX message ID (mid), retrying on attachment-not-ready errors.
-func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}) (*Message, error) {
+func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}) error {
 	if mid == "" {
-		return nil, fmt.Errorf("message mid is empty")
+		return fmt.Errorf("message mid is empty")
 	}
 
 	body := map[string]interface{}{}
@@ -93,7 +106,7 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 	case string:
 		body["text"] = v
 	default:
-		return nil, fmt.Errorf("unsupported editable type: %T", what)
+		return fmt.Errorf("unsupported editable type: %T", what)
 	}
 	for _, opt := range opts {
 		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
@@ -101,7 +114,7 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 		}
 	}
 
-	url := fmt.Sprintf("%s/messages?message_id=%s", b.URL, mid)
+	url := fmt.Sprintf("%s%s", b.URL, addVersionParam(fmt.Sprintf("/messages?message_id=%s", mid)))
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -111,25 +124,26 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 
 		data, err := json.Marshal(body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		req, err := http.NewRequest("PUT", url, bytes.NewReader(data))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		req.Header.Set("Authorization", b.Token)
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := b.Client.Do(req)
 		if err != nil {
-			return nil, &NetworkError{Op: "editMessage", Err: err}
+			lastErr = &NetworkError{Op: "editMessage", Err: err}
+			continue
 		}
 
 		respData, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if resp.StatusCode != http.StatusOK {
@@ -138,35 +152,40 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 				lastErr = apiErr
 				continue
 			}
-			return nil, apiErr
+			return apiErr
 		}
 
-		var result Message
+		var result SimpleQueryResult
 		if err := json.Unmarshal(respData, &result); err != nil {
-			return nil, err
+			return err
 		}
-		return &result, nil
+		if !result.Success {
+			return errors.New(result.Message)
+		}
+		return nil
 	}
-	return nil, lastErr
+	return lastErr
 }
 
 // editMessage edits a message via API using StoredMessage integer ID.
-func (b *Bot) editMessage(edit *EditMessage) (*Message, error) {
+func (b *Bot) editMessage(edit *EditMessage) error {
 	path := fmt.Sprintf("/messages?message_id=%d", edit.MessageID)
 	body := map[string]interface{}{
 		"text": edit.Text,
 	}
 	data, err := b.Raw("PUT", path, body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var result Message
+	var result SimpleQueryResult
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
+		return err
 	}
-
-	return &result, nil
+	if !result.Success {
+		return errors.New(result.Message)
+	}
+	return nil
 }
 
 // deleteMessage deletes a message via API using its string mid.
@@ -176,16 +195,18 @@ func (b *Bot) deleteMessage(mid string) error {
 }
 
 // getUpdates retrieves updates via long polling.
-func (b *Bot) getUpdates(marker *int64, limit int, timeout int) ([]Update, *int64, error) {
-	url := fmt.Sprintf("%s/updates?timeout=%d", b.URL, timeout)
-
+func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) ([]Update, *int64, error) {
+	path := fmt.Sprintf("/updates?timeout=%d", timeout)
 	if limit > 0 {
-		url += fmt.Sprintf("&limit=%d", limit)
+		path += fmt.Sprintf("&limit=%d", limit)
 	}
-
 	if marker != nil {
-		url += fmt.Sprintf("&marker=%d", *marker)
+		path += fmt.Sprintf("&marker=%d", *marker)
 	}
+	for _, t := range types {
+		path += "&types[]=" + t
+	}
+	url := b.URL + addVersionParam(path)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -226,24 +247,13 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int) ([]Update, *int6
 }
 
 // respondCallback responds to a callback query.
+// callback_id is sent as a query parameter per the MAX API spec.
 func (b *Bot) respondCallback(callbackID string, resp *CallbackResponse) error {
-	payload := map[string]interface{}{
-		"callback_id": callbackID,
+	body := map[string]interface{}{}
+	if resp != nil && resp.Text != "" {
+		body["notification"] = resp.Text
 	}
-
-	if resp != nil {
-		if resp.Text != "" {
-			payload["notification"] = resp.Text
-		}
-		if resp.ShowAlert {
-			payload["show_alert"] = resp.ShowAlert
-		}
-		if resp.URL != "" {
-			payload["url"] = resp.URL
-		}
-	}
-
-	_, err := b.Raw("POST", "/answers", payload)
+	_, err := b.Raw("POST", "/answers?callback_id="+callbackID, body)
 	return err
 }
 
@@ -259,6 +269,27 @@ func (b *Bot) Me() (*User, error) {
 		return nil, err
 	}
 
+	return &user, nil
+}
+
+// BotPatch contains fields to update on the bot via PATCH /me.
+type BotPatch struct {
+	Name        string       `json:"name,omitempty"`
+	Username    string       `json:"username,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Commands    []BotCommand `json:"commands,omitempty"`
+}
+
+// PatchBot updates bot properties via PATCH /me.
+func (b *Bot) PatchBot(patch BotPatch) (*User, error) {
+	data, err := b.Raw("PATCH", "/me", patch)
+	if err != nil {
+		return nil, err
+	}
+	var user User
+	if err := json.Unmarshal(data, &user); err != nil {
+		return nil, err
+	}
 	return &user, nil
 }
 
@@ -302,56 +333,139 @@ func (b *Bot) GetUploadURL(fileType string) (*UploadInfo, error) {
 	return &info, nil
 }
 
-// UploadFile uploads a file to MAX servers.
-func (b *Bot) UploadFile(fileType string, fileName string, fileData []byte) (string, error) {
-	info, err := b.GetUploadURL(fileType)
+// UploadPhoto uploads an image file via multipart/form-data.
+// Returns PhotoTokens containing the uploaded photo tokens.
+func (b *Bot) UploadPhoto(fileName string, data []byte) (*PhotoTokens, error) {
+	info, err := b.GetUploadURL("image")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", info.URL, bytes.NewReader(fileData))
+	body, contentType, err := buildMultipart(fileName, data)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "application/octet-stream")
+	req, err := http.NewRequest("POST", info.URL, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
 
 	resp, err := b.Client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, &NetworkError{Op: "UploadPhoto", Err: err}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("upload failed: %d - %s", resp.StatusCode, string(body))
+		raw, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("upload failed: %d - %s", resp.StatusCode, string(raw))
 	}
 
-	if fileType == "image" || fileType == "file" {
-		var result struct {
-			Token string `json:"token"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var result PhotoTokens
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UploadMedia uploads an audio, video or file via multipart/form-data.
+// fileType must be one of: "audio", "video", "file".
+// For audio/video the token comes from the upload URL response (info.Token).
+// For file the token comes from the upload response body.
+func (b *Bot) UploadMedia(fileType, fileName string, data []byte) (*UploadedInfo, error) {
+	info, err := b.GetUploadURL(fileType)
+	if err != nil {
+		return nil, err
+	}
+
+	body, contentType, err := buildMultipart(fileName, data)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", info.URL, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := b.Client.Do(req)
+	if err != nil {
+		return nil, &NetworkError{Op: "UploadMedia", Err: err}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("upload failed: %d - %s", resp.StatusCode, string(raw))
+	}
+
+	if fileType == "audio" || fileType == "video" {
+		// Token provided by the upload URL endpoint, response body is irrelevant.
+		return &UploadedInfo{Token: info.Token}, nil
+	}
+
+	var result UploadedInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UploadFile is a compatibility wrapper around UploadPhoto/UploadMedia.
+// Deprecated: use UploadPhoto for images and UploadMedia for other types.
+func (b *Bot) UploadFile(fileType string, fileName string, fileData []byte) (string, error) {
+	if fileType == "image" {
+		tokens, err := b.UploadPhoto(fileName, fileData)
+		if err != nil {
 			return "", err
 		}
-		return result.Token, nil
+		for _, t := range tokens.Photos {
+			return t.Token, nil
+		}
+		return "", nil
 	}
-
+	info, err := b.UploadMedia(fileType, fileName, fileData)
+	if err != nil {
+		return "", err
+	}
 	return info.Token, nil
 }
 
-// GetMessages retrieves messages in a chat. chatID is required; count and
-// marker are optional (pass 0 / nil to omit).
-func (b *Bot) GetMessages(chatID int64, count int, marker *int64) ([]Message, *int64, error) {
-	url := fmt.Sprintf("/messages?chat_id=%d", chatID)
-	if count > 0 {
-		url += fmt.Sprintf("&count=%d", count)
+// buildMultipart creates a multipart/form-data body with a single "data" field.
+func buildMultipart(fileName string, data []byte) (*bytes.Buffer, string, error) {
+	buf := &bytes.Buffer{}
+	w := multipart.NewWriter(buf)
+	part, err := w.CreateFormFile("data", fileName)
+	if err != nil {
+		return nil, "", err
 	}
-	if marker != nil {
-		url += fmt.Sprintf("&from=%d", *marker)
+	if _, err = part.Write(data); err != nil {
+		return nil, "", err
+	}
+	if err = w.Close(); err != nil {
+		return nil, "", err
+	}
+	return buf, w.FormDataContentType(), nil
+}
+
+// GetMessages retrieves messages in a chat.
+// from/to are optional timestamp boundaries (pass 0 to omit); count limits results.
+func (b *Bot) GetMessages(chatID int64, count int, from, to int64) ([]Message, *int64, error) {
+	path := fmt.Sprintf("/messages?chat_id=%d", chatID)
+	if count > 0 {
+		path += fmt.Sprintf("&count=%d", count)
+	}
+	if from > 0 {
+		path += fmt.Sprintf("&from=%d", from)
+	}
+	if to > 0 {
+		path += fmt.Sprintf("&to=%d", to)
 	}
 
-	data, err := b.Raw("GET", url, nil)
+	data, err := b.Raw("GET", path, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -399,7 +513,7 @@ func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
 
 // Raw makes a raw API request.
 func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) {
-	url := b.URL + endpoint
+	url := b.URL + addVersionParam(endpoint)
 
 	var body io.Reader
 	if payload != nil {
@@ -439,18 +553,20 @@ func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) 
 }
 
 // parseAPIError parses an error response body into an *APIError.
-// The MAX API returns {"code": "error.code", "message": "human readable"} on errors.
+// MAX API error body: {"error": "short", "code": "dot.separated.key", "message": "human text"}
 func parseAPIError(statusCode int, body []byte) *APIError {
 	var resp struct {
+		Error   string `json:"error"`
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}
 	apiErr := &APIError{Code: statusCode}
-	if json.Unmarshal(body, &resp) == nil && resp.Code != "" {
+	if json.Unmarshal(body, &resp) == nil && (resp.Code != "" || resp.Error != "") {
+		apiErr.ErrorText = resp.Error
 		apiErr.Message = resp.Code
 		apiErr.Details = resp.Message
 	} else {
-		apiErr.Message = string(body)
+		apiErr.ErrorText = string(body)
 	}
 	return apiErr
 }

@@ -48,6 +48,10 @@ func (c *nativeContext) Sender() *User {
 	if c.update.Message != nil {
 		return c.update.Message.Sender
 	}
+	// bot_started, user_added, bot_added, etc.
+	if c.update.User != nil {
+		return c.update.User
+	}
 	return nil
 }
 
@@ -58,6 +62,10 @@ func (c *nativeContext) Chat() *Chat {
 	}
 	if cb := c.update.CallbackQuery; cb != nil && cb.Message != nil {
 		return cb.Message.Chat()
+	}
+	// Non-message updates that carry chat_id.
+	if c.update.ChatID != 0 {
+		return &Chat{ID: c.update.ChatID}
 	}
 	return nil
 }
@@ -138,8 +146,7 @@ func (c *nativeContext) Edit(what interface{}, opts ...interface{}) error {
 	if msg == nil {
 		return fmt.Errorf("message not found")
 	}
-	_, err := c.b.Edit(msg, what, opts...)
-	return err
+	return c.b.Edit(msg, what, opts...)
 }
 
 // Delete deletes the message that triggered this update.

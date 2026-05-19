@@ -3,23 +3,32 @@ package maxbot
 import "fmt"
 
 // APIError represents an error response from the MAX API.
+// The API body has three fields: error (short code), code (dot-separated key), message (human text).
 type APIError struct {
-	Code    int
-	Message string
-	Details string
+	Code      int    // HTTP status code
+	ErrorText string // "error" field — short machine-readable description
+	Message   string // "code" field — dot-separated error key
+	Details   string // "message" field — human-readable description
 }
 
 func (e *APIError) Error() string {
-	if e.Details != "" {
-		return fmt.Sprintf("api error %d: %s (%s)", e.Code, e.Message, e.Details)
+	parts := fmt.Sprintf("api error %d", e.Code)
+	if e.ErrorText != "" {
+		parts += ": " + e.ErrorText
 	}
-	return fmt.Sprintf("api error %d: %s", e.Code, e.Message)
+	if e.Message != "" {
+		parts += " (" + e.Message + ")"
+	}
+	if e.Details != "" {
+		parts += ": " + e.Details
+	}
+	return parts
 }
 
 // IsAttachmentNotReady reports whether the error means the uploaded attachment
 // has not been processed by MAX yet and the request should be retried.
 func (e *APIError) IsAttachmentNotReady() bool {
-	return e.Message == "attachment.not.ready"
+	return e.ErrorText == "attachment.not.ready" || e.Message == "attachment.not.ready"
 }
 
 // NetworkError wraps a network-level failure.

@@ -14,6 +14,8 @@ type User struct {
 	Username       string `json:"username,omitempty"`
 	IsBot          bool   `json:"is_bot"`
 	LastActivityAt int64  `json:"last_activity_time"`
+	AvatarURL      string `json:"avatar_url,omitempty"`
+	FullAvatarURL  string `json:"full_avatar_url,omitempty"`
 }
 
 // Recipient returns user ID as recipient identifier.
@@ -21,12 +23,36 @@ func (u *User) Recipient() string {
 	return fmt.Sprintf("%d", u.ID)
 }
 
+// ChatStatus represents the bot's membership state in a chat.
+type ChatStatus string
+
+const (
+	ChatActive    ChatStatus = "active"
+	ChatRemoved   ChatStatus = "removed"
+	ChatLeft      ChatStatus = "left"
+	ChatClosed    ChatStatus = "closed"
+	ChatSuspended ChatStatus = "suspended"
+)
+
+// Image holds a URL to an image resource.
+type Image struct {
+	URL string `json:"url"`
+}
+
 // Chat represents a MAX chat.
 type Chat struct {
-	ID          int64  `json:"chat_id"`
-	Type        string `json:"type"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
+	ID                int64      `json:"chat_id"`
+	Type              string     `json:"type"`
+	Status            ChatStatus `json:"status,omitempty"`
+	Title             string     `json:"title,omitempty"`
+	Description       string     `json:"description,omitempty"`
+	Icon              *Image     `json:"icon,omitempty"`
+	LastEventTime     int64      `json:"last_event_time,omitempty"`
+	ParticipantsCount int        `json:"participants_count,omitempty"`
+	OwnerID           int64      `json:"owner_id,omitempty"`
+	IsPublic          bool       `json:"is_public,omitempty"`
+	Link              string     `json:"link,omitempty"`
+	MessagesCount     int64      `json:"messages_count,omitempty"`
 }
 
 // Recipient returns chat ID as recipient identifier.
@@ -40,20 +66,21 @@ type Message struct {
 	Sender        *User          `json:"sender,omitempty"`
 	Timestamp     int64          `json:"timestamp"`
 	Body          *MessageBody   `json:"body,omitempty"`
+	// Link is the quoted/forwarded message reference at the top-level Message object per spec.
+	Link *LinkedMessage `json:"link,omitempty"`
 
-	// ReplyTo содержит цитируемое сообщение если это реплай.
-	// заполняется автоматически из body.link при десериализации.
+	// ReplyTo is populated automatically from Link when type == "reply".
 	ReplyTo *LinkedMessage `json:"-"`
 }
 
-// UnmarshalJSON кастомный десериализатор — поднимает body.link в ReplyTo для удобства.
+// UnmarshalJSON populates ReplyTo from the top-level link field when type is "reply".
 func (m *Message) UnmarshalJSON(data []byte) error {
-	// временная структура без кастомного UnmarshalJSON чтобы избежать рекурсии
 	type plain struct {
 		RecipientInfo *RecipientInfo `json:"recipient,omitempty"`
 		Sender        *User          `json:"sender,omitempty"`
 		Timestamp     int64          `json:"timestamp"`
 		Body          *MessageBody   `json:"body,omitempty"`
+		Link          *LinkedMessage `json:"link,omitempty"`
 	}
 	var p plain
 	if err := json.Unmarshal(data, &p); err != nil {
@@ -63,8 +90,9 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	m.Sender = p.Sender
 	m.Timestamp = p.Timestamp
 	m.Body = p.Body
-	if m.Body != nil && m.Body.Link != nil && m.Body.Link.Type == "reply" {
-		m.ReplyTo = m.Body.Link
+	m.Link = p.Link
+	if m.Link != nil && m.Link.Type == "reply" {
+		m.ReplyTo = m.Link
 	}
 	return nil
 }
@@ -76,7 +104,9 @@ type MessageBody struct {
 	Text        string              `json:"text"`
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
 	Markup      []MarkupElement     `json:"markup,omitempty"`
-	Link        *LinkedMessage      `json:"link,omitempty"`
+	// ReplyTo is the mid of the message being replied to (used when sending).
+	// Do not confuse with Message.ReplyTo which is the full LinkedMessage object.
+	ReplyTo string `json:"reply_to,omitempty"`
 }
 
 // MarkupElement представляет элемент форматирования текста (bold, italic и т.д.).
@@ -159,6 +189,23 @@ func (m *Message) Mid() string {
 	return ""
 }
 
+// Update type constants.
+const (
+	UpdateMessageCreated   = "message_created"
+	UpdateMessageEdited    = "message_edited"
+	UpdateMessageRemoved   = "message_removed"
+	UpdateMessageCallback  = "message_callback"
+	UpdateBotAdded         = "bot_added"
+	UpdateBotRemoved       = "bot_removed"
+	UpdateBotStarted       = "bot_started"
+	UpdateBotStopped       = "bot_stopped"
+	UpdateUserAdded        = "user_added"
+	UpdateUserRemoved      = "user_removed"
+	UpdateChatTitleChanged = "chat_title_changed"
+	UpdateDialogRemoved    = "dialog_removed"
+	UpdateDialogCleared    = "dialog_cleared"
+)
+
 // Update represents an incoming update from MAX API.
 type Update struct {
 	UpdateType    string         `json:"update_type"`
@@ -166,6 +213,23 @@ type Update struct {
 	UserLocale    string         `json:"user_locale,omitempty"`
 	Message       *Message       `json:"message,omitempty"`
 	CallbackQuery *CallbackQuery `json:"callback,omitempty"`
+
+	// Fields for bot_started, bot_added, bot_removed, bot_stopped,
+	// user_added, user_removed, chat_title_changed.
+	ChatID    int64  `json:"chat_id,omitempty"`
+	User      *User  `json:"user,omitempty"`
+	Payload   string `json:"payload,omitempty"` // bot_started deeplink
+	Title     string `json:"title,omitempty"`   // chat_title_changed
+
+	// Fields for message_removed.
+	MessageID string `json:"message_id,omitempty"`
+	UserID    int64  `json:"user_id,omitempty"`
+
+	// Fields for user_added.
+	InviterID int64 `json:"inviter_id,omitempty"`
+
+	// Fields for user_added / user_removed.
+	IsChannel bool `json:"is_channel,omitempty"`
 }
 
 // CallbackQuery represents a callback button press.
@@ -193,10 +257,70 @@ type BotCommand struct {
 	Description string `json:"description"`
 }
 
-// ChatMember represents a chat member with their status.
+// ChatAdminPermission is a named permission that can be granted to a chat admin.
+type ChatAdminPermission string
+
+const (
+	PermReadAllMessages  ChatAdminPermission = "read_all_messages"
+	PermAddRemoveMembers ChatAdminPermission = "add_remove_members"
+	PermAddAdmins        ChatAdminPermission = "add_admins"
+	PermChangeChatInfo   ChatAdminPermission = "change_chat_info"
+	PermPinMessage       ChatAdminPermission = "pin_message"
+	PermWrite            ChatAdminPermission = "write"
+)
+
+// ChatMember represents a chat participant.
+// The MAX API returns user fields flat alongside member-specific fields;
+// UnmarshalJSON populates the nested User from those flat fields.
 type ChatMember struct {
-	User   *User  `json:"user"`
-	Status string `json:"status"`
+	User           *User               `json:"-"`
+	IsOwner        bool                `json:"is_owner"`
+	IsAdmin        bool                `json:"is_admin"`
+	JoinTime       int64               `json:"join_time"`
+	LastAccessTime int64               `json:"last_access_time"`
+	Permissions    []ChatAdminPermission `json:"permissions,omitempty"`
+}
+
+// UnmarshalJSON reads flat user fields from the API response into the nested User struct.
+func (m *ChatMember) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		// User fields (flat in the API response)
+		UserID         int64  `json:"user_id"`
+		Name           string `json:"name"`
+		FirstName      string `json:"first_name"`
+		LastName       string `json:"last_name"`
+		Username       string `json:"username"`
+		IsBot          bool   `json:"is_bot"`
+		LastActivityAt int64  `json:"last_activity_time"`
+		AvatarURL      string `json:"avatar_url"`
+		FullAvatarURL  string `json:"full_avatar_url"`
+		// ChatMember-specific fields
+		IsOwner        bool                  `json:"is_owner"`
+		IsAdmin        bool                  `json:"is_admin"`
+		JoinTime       int64                 `json:"join_time"`
+		LastAccessTime int64                 `json:"last_access_time"`
+		Permissions    []ChatAdminPermission `json:"permissions"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	m.User = &User{
+		ID:             raw.UserID,
+		Name:           raw.Name,
+		FirstName:      raw.FirstName,
+		LastName:       raw.LastName,
+		Username:       raw.Username,
+		IsBot:          raw.IsBot,
+		LastActivityAt: raw.LastActivityAt,
+		AvatarURL:      raw.AvatarURL,
+		FullAvatarURL:  raw.FullAvatarURL,
+	}
+	m.IsOwner = raw.IsOwner
+	m.IsAdmin = raw.IsAdmin
+	m.JoinTime = raw.JoinTime
+	m.LastAccessTime = raw.LastAccessTime
+	m.Permissions = raw.Permissions
+	return nil
 }
 
 // ChatAction represents a bot action in chat (typing, sending media, etc).
@@ -222,4 +346,26 @@ type WebhookInfo struct {
 type UploadInfo struct {
 	URL   string `json:"url"`
 	Token string `json:"token,omitempty"`
+}
+
+// SimpleQueryResult is the response body for write operations that return only success status.
+type SimpleQueryResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// PhotoToken holds the token for a single uploaded photo.
+type PhotoToken struct {
+	Token string `json:"token"`
+}
+
+// PhotoTokens is the response from a photo upload: a map keyed by photo size/index.
+type PhotoTokens struct {
+	Photos map[string]PhotoToken `json:"photos"`
+}
+
+// UploadedInfo is the response from an audio/video/file upload.
+type UploadedInfo struct {
+	FileID int64  `json:"file_id,omitempty"`
+	Token  string `json:"token,omitempty"`
 }
