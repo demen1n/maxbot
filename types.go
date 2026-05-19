@@ -23,12 +23,36 @@ func (u *User) Recipient() string {
 	return fmt.Sprintf("%d", u.ID)
 }
 
+// ChatStatus represents the bot's membership state in a chat.
+type ChatStatus string
+
+const (
+	ChatActive    ChatStatus = "active"
+	ChatRemoved   ChatStatus = "removed"
+	ChatLeft      ChatStatus = "left"
+	ChatClosed    ChatStatus = "closed"
+	ChatSuspended ChatStatus = "suspended"
+)
+
+// Image holds a URL to an image resource.
+type Image struct {
+	URL string `json:"url"`
+}
+
 // Chat represents a MAX chat.
 type Chat struct {
-	ID          int64  `json:"chat_id"`
-	Type        string `json:"type"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
+	ID                int64      `json:"chat_id"`
+	Type              string     `json:"type"`
+	Status            ChatStatus `json:"status,omitempty"`
+	Title             string     `json:"title,omitempty"`
+	Description       string     `json:"description,omitempty"`
+	Icon              *Image     `json:"icon,omitempty"`
+	LastEventTime     int64      `json:"last_event_time,omitempty"`
+	ParticipantsCount int        `json:"participants_count,omitempty"`
+	OwnerID           int64      `json:"owner_id,omitempty"`
+	IsPublic          bool       `json:"is_public,omitempty"`
+	Link              string     `json:"link,omitempty"`
+	MessagesCount     int64      `json:"messages_count,omitempty"`
 }
 
 // Recipient returns chat ID as recipient identifier.
