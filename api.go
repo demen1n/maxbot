@@ -233,24 +233,13 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int) ([]Update, *int6
 }
 
 // respondCallback responds to a callback query.
+// callback_id is sent as a query parameter per the MAX API spec.
 func (b *Bot) respondCallback(callbackID string, resp *CallbackResponse) error {
-	payload := map[string]interface{}{
-		"callback_id": callbackID,
+	body := map[string]interface{}{}
+	if resp != nil && resp.Text != "" {
+		body["notification"] = resp.Text
 	}
-
-	if resp != nil {
-		if resp.Text != "" {
-			payload["notification"] = resp.Text
-		}
-		if resp.ShowAlert {
-			payload["show_alert"] = resp.ShowAlert
-		}
-		if resp.URL != "" {
-			payload["url"] = resp.URL
-		}
-	}
-
-	_, err := b.Raw("POST", "/answers", payload)
+	_, err := b.Raw("POST", "/answers?callback_id="+callbackID, body)
 	return err
 }
 

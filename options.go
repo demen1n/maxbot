@@ -8,11 +8,10 @@ type SendOptions struct {
 	ReplyToMid  string // mid of message to reply to
 }
 
-// CallbackResponse represents a response to callback query.
+// CallbackResponse represents a response to a callback query.
+// Text is the notification toast shown to the user.
 type CallbackResponse struct {
-	Text      string `json:"text,omitempty"`
-	ShowAlert bool   `json:"show_alert,omitempty"`
-	URL       string `json:"url,omitempty"`
+	Text string
 }
 
 // Attachment represents a message attachment (keyboard, file, etc).

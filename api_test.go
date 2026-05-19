@@ -2,6 +2,7 @@ package maxbot
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -59,6 +60,35 @@ func TestEditMessageByMidSuccess(t *testing.T) {
 	msg := &Message{Body: &MessageBody{Mid: "mid.abc"}}
 	if err := b.Edit(msg, "new text"); err != nil {
 		t.Errorf("Edit error: %v", err)
+	}
+}
+
+// TASK-3: respondCallback puts callback_id in query and notification in body.
+func TestRespondCallbackQueryParam(t *testing.T) {
+	var gotCallbackID string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCallbackID = r.URL.Query().Get("callback_id")
+		data, _ := io.ReadAll(r.Body)
+		json.Unmarshal(data, &gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	err := b.respondCallback("cbid-42", &CallbackResponse{Text: "toast!"})
+	if err != nil {
+		t.Fatalf("respondCallback error: %v", err)
+	}
+	if gotCallbackID != "cbid-42" {
+		t.Errorf("expected callback_id=cbid-42 in query, got %q", gotCallbackID)
+	}
+	if gotBody["notification"] != "toast!" {
+		t.Errorf("expected notification=toast! in body, got %v", gotBody["notification"])
+	}
+	if _, hasID := gotBody["callback_id"]; hasID {
+		t.Error("callback_id must not be in request body")
 	}
 }
 
