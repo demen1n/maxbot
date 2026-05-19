@@ -551,18 +551,20 @@ func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) 
 }
 
 // parseAPIError parses an error response body into an *APIError.
-// The MAX API returns {"code": "error.code", "message": "human readable"} on errors.
+// MAX API error body: {"error": "short", "code": "dot.separated.key", "message": "human text"}
 func parseAPIError(statusCode int, body []byte) *APIError {
 	var resp struct {
+		Error   string `json:"error"`
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}
 	apiErr := &APIError{Code: statusCode}
-	if json.Unmarshal(body, &resp) == nil && resp.Code != "" {
+	if json.Unmarshal(body, &resp) == nil && (resp.Code != "" || resp.Error != "") {
+		apiErr.ErrorText = resp.Error
 		apiErr.Message = resp.Code
 		apiErr.Details = resp.Message
 	} else {
-		apiErr.Message = string(body)
+		apiErr.ErrorText = string(body)
 	}
 	return apiErr
 }
