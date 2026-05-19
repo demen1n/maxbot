@@ -7,6 +7,32 @@ import (
 	"testing"
 )
 
+// TASK-9: GetChatAdmins reads members field, not admins.
+func TestGetChatAdminsReadsMembers(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"members": []map[string]interface{}{
+				{"user_id": 1, "name": "Alice", "is_owner": true},
+			},
+			"marker": nil,
+		})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	members, _, err := b.GetChatAdmins(1)
+	if err != nil {
+		t.Fatalf("GetChatAdmins error: %v", err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("expected 1 member, got %d", len(members))
+	}
+	if members[0].User == nil || members[0].User.ID != 1 {
+		t.Errorf("expected member user_id=1, got %+v", members[0])
+	}
+}
+
 // TASK-7: KickChatMember sends user_id and block as query params, not body.
 func TestKickChatMemberQueryParams(t *testing.T) {
 	var gotUserID, gotBlock string

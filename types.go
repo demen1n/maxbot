@@ -14,6 +14,8 @@ type User struct {
 	Username       string `json:"username,omitempty"`
 	IsBot          bool   `json:"is_bot"`
 	LastActivityAt int64  `json:"last_activity_time"`
+	AvatarURL      string `json:"avatar_url,omitempty"`
+	FullAvatarURL  string `json:"full_avatar_url,omitempty"`
 }
 
 // Recipient returns user ID as recipient identifier.
@@ -194,10 +196,70 @@ type BotCommand struct {
 	Description string `json:"description"`
 }
 
-// ChatMember represents a chat member with their status.
+// ChatAdminPermission is a named permission that can be granted to a chat admin.
+type ChatAdminPermission string
+
+const (
+	PermReadAllMessages  ChatAdminPermission = "read_all_messages"
+	PermAddRemoveMembers ChatAdminPermission = "add_remove_members"
+	PermAddAdmins        ChatAdminPermission = "add_admins"
+	PermChangeChatInfo   ChatAdminPermission = "change_chat_info"
+	PermPinMessage       ChatAdminPermission = "pin_message"
+	PermWrite            ChatAdminPermission = "write"
+)
+
+// ChatMember represents a chat participant.
+// The MAX API returns user fields flat alongside member-specific fields;
+// UnmarshalJSON populates the nested User from those flat fields.
 type ChatMember struct {
-	User   *User  `json:"user"`
-	Status string `json:"status"`
+	User           *User               `json:"-"`
+	IsOwner        bool                `json:"is_owner"`
+	IsAdmin        bool                `json:"is_admin"`
+	JoinTime       int64               `json:"join_time"`
+	LastAccessTime int64               `json:"last_access_time"`
+	Permissions    []ChatAdminPermission `json:"permissions,omitempty"`
+}
+
+// UnmarshalJSON reads flat user fields from the API response into the nested User struct.
+func (m *ChatMember) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		// User fields (flat in the API response)
+		UserID         int64  `json:"user_id"`
+		Name           string `json:"name"`
+		FirstName      string `json:"first_name"`
+		LastName       string `json:"last_name"`
+		Username       string `json:"username"`
+		IsBot          bool   `json:"is_bot"`
+		LastActivityAt int64  `json:"last_activity_time"`
+		AvatarURL      string `json:"avatar_url"`
+		FullAvatarURL  string `json:"full_avatar_url"`
+		// ChatMember-specific fields
+		IsOwner        bool                  `json:"is_owner"`
+		IsAdmin        bool                  `json:"is_admin"`
+		JoinTime       int64                 `json:"join_time"`
+		LastAccessTime int64                 `json:"last_access_time"`
+		Permissions    []ChatAdminPermission `json:"permissions"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	m.User = &User{
+		ID:             raw.UserID,
+		Name:           raw.Name,
+		FirstName:      raw.FirstName,
+		LastName:       raw.LastName,
+		Username:       raw.Username,
+		IsBot:          raw.IsBot,
+		LastActivityAt: raw.LastActivityAt,
+		AvatarURL:      raw.AvatarURL,
+		FullAvatarURL:  raw.FullAvatarURL,
+	}
+	m.IsOwner = raw.IsOwner
+	m.IsAdmin = raw.IsAdmin
+	m.JoinTime = raw.JoinTime
+	m.LastAccessTime = raw.LastAccessTime
+	m.Permissions = raw.Permissions
+	return nil
 }
 
 // ChatAction represents a bot action in chat (typing, sending media, etc).

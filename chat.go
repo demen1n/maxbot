@@ -113,22 +113,24 @@ func (b *Bot) GetChatMember(chatID int64, userID int64) (*ChatMember, error) {
 }
 
 // GetChatAdmins gets the list of chat administrators.
-func (b *Bot) GetChatAdmins(chatID int64) ([]ChatMember, error) {
+// Returns members and an optional pagination marker.
+func (b *Bot) GetChatAdmins(chatID int64) ([]ChatMember, *int64, error) {
 	url := fmt.Sprintf("/chats/%d/members/admins", chatID)
 	data, err := b.Raw("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response struct {
-		Admins []ChatMember `json:"admins"`
+		Members []ChatMember `json:"members"`
+		Marker  *int64       `json:"marker"`
 	}
 
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response.Admins, nil
+	return response.Members, response.Marker, nil
 }
 
 // PromoteChatMember promotes a user to administrator.
