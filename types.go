@@ -104,6 +104,9 @@ type MessageBody struct {
 	Text        string              `json:"text"`
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
 	Markup      []MarkupElement     `json:"markup,omitempty"`
+	// ReplyTo is the mid of the message being replied to (used when sending).
+	// Do not confuse with Message.ReplyTo which is the full LinkedMessage object.
+	ReplyTo string `json:"reply_to,omitempty"`
 }
 
 // MarkupElement представляет элемент форматирования текста (bold, italic и т.д.).
