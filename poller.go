@@ -20,6 +20,9 @@ type LongPoller struct {
 	Limit   int
 	Timeout time.Duration
 	Marker  *int64
+	// Types filters which update types are requested from the server.
+	// Empty slice means all types.
+	Types []string
 }
 
 // Poll starts the long polling loop.
@@ -33,7 +36,7 @@ func (p *LongPoller) Poll(b *Bot, updates chan Update, stop chan struct{}) {
 			close(updates)
 			return
 		default:
-			upds, marker, err := b.getUpdates(p.Marker, p.Limit, int(p.Timeout.Seconds()))
+			upds, marker, err := b.getUpdates(p.Marker, p.Limit, int(p.Timeout.Seconds()), p.Types)
 			if err != nil {
 				b.log("Error getting updates: %v", err)
 				time.Sleep(time.Second)

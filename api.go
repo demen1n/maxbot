@@ -193,13 +193,16 @@ func (b *Bot) deleteMessage(mid string) error {
 }
 
 // getUpdates retrieves updates via long polling.
-func (b *Bot) getUpdates(marker *int64, limit int, timeout int) ([]Update, *int64, error) {
+func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) ([]Update, *int64, error) {
 	path := fmt.Sprintf("/updates?timeout=%d", timeout)
 	if limit > 0 {
 		path += fmt.Sprintf("&limit=%d", limit)
 	}
 	if marker != nil {
 		path += fmt.Sprintf("&marker=%d", *marker)
+	}
+	for _, t := range types {
+		path += "&types[]=" + t
 	}
 	url := b.URL + addVersionParam(path)
 
@@ -264,6 +267,27 @@ func (b *Bot) Me() (*User, error) {
 		return nil, err
 	}
 
+	return &user, nil
+}
+
+// BotPatch contains fields to update on the bot via PATCH /me.
+type BotPatch struct {
+	Name        string       `json:"name,omitempty"`
+	Username    string       `json:"username,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Commands    []BotCommand `json:"commands,omitempty"`
+}
+
+// PatchBot updates bot properties via PATCH /me.
+func (b *Bot) PatchBot(patch BotPatch) (*User, error) {
+	data, err := b.Raw("PATCH", "/me", patch)
+	if err != nil {
+		return nil, err
+	}
+	var user User
+	if err := json.Unmarshal(data, &user); err != nil {
+		return nil, err
+	}
 	return &user, nil
 }
 

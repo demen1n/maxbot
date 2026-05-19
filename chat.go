@@ -34,6 +34,19 @@ func (b *Bot) GetChats(count int, marker *int64) ([]Chat, *int64, error) {
 	return response.Chats, response.Marker, nil
 }
 
+// GetChatByLink retrieves chat information by its public link (e.g. "mygroup").
+func (b *Bot) GetChatByLink(link string) (*Chat, error) {
+	data, err := b.Raw("GET", "/chats/"+link, nil)
+	if err != nil {
+		return nil, err
+	}
+	var chat Chat
+	if err := json.Unmarshal(data, &chat); err != nil {
+		return nil, err
+	}
+	return &chat, nil
+}
+
 // GetChat retrieves chat information by ID.
 func (b *Bot) GetChat(chatID int64) (*Chat, error) {
 	url := fmt.Sprintf("/chats/%d", chatID)
@@ -115,6 +128,28 @@ func (b *Bot) GetChatMembers(chatID, count int64, marker *int64) ([]ChatMember, 
 	}
 
 	return response.Members, response.Marker, nil
+}
+
+// GetSpecificChatMembers retrieves info for a specific set of users in the chat.
+func (b *Bot) GetSpecificChatMembers(chatID int64, userIDs []int64) ([]ChatMember, error) {
+	path := fmt.Sprintf("/chats/%d/members?", chatID)
+	for i, id := range userIDs {
+		if i > 0 {
+			path += "&"
+		}
+		path += fmt.Sprintf("user_ids=%d", id)
+	}
+	data, err := b.Raw("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Members []ChatMember `json:"members"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+	return response.Members, nil
 }
 
 // GetChatMember gets information about a specific chat member.
@@ -214,13 +249,16 @@ func (b *Bot) LeaveChat(chatID int64) error {
 }
 
 // PinMessage pins a message in the chat.
-func (b *Bot) PinMessage(chatID int64, messageID string) error {
-	url := fmt.Sprintf("/chats/%d/pin", chatID)
+// notify controls whether members are notified; pass nil to use server default.
+func (b *Bot) PinMessage(chatID int64, messageID string, notify *bool) error {
+	endpoint := fmt.Sprintf("/chats/%d/pin", chatID)
 	payload := map[string]interface{}{
 		"message_id": messageID,
 	}
-
-	_, err := b.Raw("PUT", url, payload)
+	if notify != nil {
+		payload["notify"] = *notify
+	}
+	_, err := b.Raw("PUT", endpoint, payload)
 	return err
 }
 
