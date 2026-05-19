@@ -35,13 +35,22 @@ type InlineButton struct {
 	// Geolocation button (type: "request_geo_location")
 	Quick bool `json:"quick,omitempty"`
 
+	// Clipboard button (type: "clipboard")
+	ClipboardPayload string `json:"clipboard_payload,omitempty"`
+
+	// Chat button (type: "chat")
+	ChatTitle        string `json:"chat_title,omitempty"`
+	ChatDescription  string `json:"chat_description,omitempty"`
+	ChatStartPayload string `json:"start_payload,omitempty"`
+	ChatUUID         string `json:"uuid,omitempty"`
+
 	// Internal routing hint; not serialised.
-	// When non-empty and Payload is empty, Payload is set to Data at construction time.
 	Data string `json:"-"`
 
-	// Contact and Location are internal type selectors; not serialised.
+	// Internal type selectors; not serialised.
 	Contact  bool `json:"-"`
 	Location bool `json:"-"`
+	Message  bool `json:"-"` // forces type:"message"
 }
 
 // MarshalJSON serialises the button with an auto-computed "type" field.
@@ -57,6 +66,12 @@ func (b *InlineButton) MarshalJSON() ([]byte, error) {
 		btnType = "request_contact"
 	case b.Location:
 		btnType = "request_geo_location"
+	case b.ClipboardPayload != "":
+		btnType = "clipboard"
+	case b.ChatTitle != "":
+		btnType = "chat"
+	case b.Message:
+		btnType = "message"
 	default:
 		btnType = "callback"
 	}
@@ -125,4 +140,30 @@ func (r *ReplyMarkup) OpenApp(text, webApp, payload string, contactID int64) Inl
 		btn.ContactID = contactID
 	}
 	return btn
+}
+
+// Clipboard creates a button that copies text to the clipboard when pressed.
+func (r *ReplyMarkup) Clipboard(text, payload string) InlineButton {
+	return InlineButton{
+		Text:             text,
+		ClipboardPayload: payload,
+	}
+}
+
+// Chat creates a button that initiates a new chat creation flow.
+func (r *ReplyMarkup) Chat(text, title, description, startPayload string) InlineButton {
+	return InlineButton{
+		Text:             text,
+		ChatTitle:        title,
+		ChatDescription:  description,
+		ChatStartPayload: startPayload,
+	}
+}
+
+// MessageBtn creates a template message button.
+func (r *ReplyMarkup) MessageBtn(text string) InlineButton {
+	return InlineButton{
+		Text:    text,
+		Message: true,
+	}
 }

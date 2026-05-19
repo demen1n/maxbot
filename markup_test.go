@@ -18,6 +18,56 @@ func marshalBtn(t *testing.T, btn InlineButton) map[string]interface{} {
 	return m
 }
 
+// TASK-14: clipboard, chat, message button types.
+func TestNewButtonTypesMarshal(t *testing.T) {
+	rm := &ReplyMarkup{}
+
+	tests := []struct {
+		name     string
+		btn      InlineButton
+		wantType string
+		check    func(t *testing.T, m map[string]interface{})
+	}{
+		{
+			name:     "clipboard",
+			btn:      rm.Clipboard("Copy", "copy-text"),
+			wantType: "clipboard",
+			check: func(t *testing.T, m map[string]interface{}) {
+				if m["clipboard_payload"] != "copy-text" {
+					t.Errorf("expected clipboard_payload=copy-text, got %v", m["clipboard_payload"])
+				}
+			},
+		},
+		{
+			name:     "chat",
+			btn:      rm.Chat("New Chat", "My Group", "A group chat", "start"),
+			wantType: "chat",
+			check: func(t *testing.T, m map[string]interface{}) {
+				if m["chat_title"] != "My Group" {
+					t.Errorf("expected chat_title=My Group, got %v", m["chat_title"])
+				}
+			},
+		},
+		{
+			name:     "message",
+			btn:      rm.MessageBtn("Send"),
+			wantType: "message",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := marshalBtn(t, tc.btn)
+			if m["type"] != tc.wantType {
+				t.Errorf("expected type=%q, got %q", tc.wantType, m["type"])
+			}
+			if tc.check != nil {
+				tc.check(t, m)
+			}
+		})
+	}
+}
+
 // TASK-8: MarshalJSON auto-sets "type" based on filled fields.
 func TestInlineButtonMarshalJSON(t *testing.T) {
 	rm := &ReplyMarkup{}
