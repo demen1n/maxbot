@@ -65,7 +65,8 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 
 		resp, err := b.Client.Do(req)
 		if err != nil {
-			return nil, &NetworkError{Op: "sendMessage", Err: err}
+			lastErr = &NetworkError{Op: "sendMessage", Err: err}
+			continue
 		}
 
 		respData, err := io.ReadAll(resp.Body)
@@ -135,7 +136,8 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 
 		resp, err := b.Client.Do(req)
 		if err != nil {
-			return &NetworkError{Op: "editMessage", Err: err}
+			lastErr = &NetworkError{Op: "editMessage", Err: err}
+			continue
 		}
 
 		respData, err := io.ReadAll(resp.Body)
