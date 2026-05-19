@@ -17,20 +17,53 @@ const (
 )
 
 // InlineButton represents an inline keyboard button.
+// The button type is determined automatically by MarshalJSON based on which fields are set.
 type InlineButton struct {
-	Text    string `json:"text"`
-	Type    string `json:"type"`
-	Intent  Intent `json:"intent,omitempty"`
+	Text   string `json:"text"`
+	Intent Intent `json:"intent,omitempty"`
+
+	// Callback button
 	Payload string `json:"payload,omitempty"`
-	URL     string `json:"url,omitempty"`
-	// OpenApp fields
-	App        string `json:"app,omitempty"`
-	AppPayload string `json:"app_payload,omitempty"`
-	ContactID  int64  `json:"contact_id,omitempty"`
-	// Geolocation fields
+
+	// Link button
+	URL string `json:"url,omitempty"`
+
+	// OpenApp button (type: "open_app")
+	WebApp    string `json:"web_app,omitempty"`
+	ContactID int64  `json:"contact_id,omitempty"`
+
+	// Geolocation button (type: "request_geo_location")
 	Quick bool `json:"quick,omitempty"`
 
-	Data string `json:"-"` // used for routing only
+	// Internal routing hint; not serialised.
+	// When non-empty and Payload is empty, Payload is set to Data at construction time.
+	Data string `json:"-"`
+
+	// Contact and Location are internal type selectors; not serialised.
+	Contact  bool `json:"-"`
+	Location bool `json:"-"`
+}
+
+// MarshalJSON serialises the button with an auto-computed "type" field.
+func (b *InlineButton) MarshalJSON() ([]byte, error) {
+	type Alias InlineButton
+	var btnType string
+	switch {
+	case b.WebApp != "":
+		btnType = "open_app"
+	case b.URL != "":
+		btnType = "link"
+	case b.Contact:
+		btnType = "request_contact"
+	case b.Location:
+		btnType = "request_geo_location"
+	default:
+		btnType = "callback"
+	}
+	return json.Marshal(struct {
+		Type string `json:"type"`
+		*Alias
+	}{Type: btnType, Alias: (*Alias)(b)})
 }
 
 // Row adds a row of buttons to the keyboard.
@@ -38,12 +71,10 @@ func (r *ReplyMarkup) Row(buttons ...InlineButton) {
 	r.InlineKeyboard = append(r.InlineKeyboard, buttons)
 }
 
-// Data creates a callback button.
-// If payload is provided as structured data, it will be marshaled to JSON.
+// Data creates a callback button with the given payload.
 func (r *ReplyMarkup) Data(text, data string, payload ...interface{}) InlineButton {
 	btn := InlineButton{
 		Text:    text,
-		Type:    "callback",
 		Data:    data,
 		Payload: data,
 	}
@@ -59,7 +90,6 @@ func (r *ReplyMarkup) Data(text, data string, payload ...interface{}) InlineButt
 func (r *ReplyMarkup) URL(text, url string) InlineButton {
 	return InlineButton{
 		Text: text,
-		Type: "link",
 		URL:  url,
 	}
 }
@@ -67,8 +97,8 @@ func (r *ReplyMarkup) URL(text, url string) InlineButton {
 // Contact creates a button that requests the user's phone number.
 func (r *ReplyMarkup) Contact(text string) InlineButton {
 	return InlineButton{
-		Text: text,
-		Type: "request_contact",
+		Text:    text,
+		Contact: true,
 	}
 }
 
@@ -76,21 +106,20 @@ func (r *ReplyMarkup) Contact(text string) InlineButton {
 // If quick is true, the location is sent immediately without a confirmation dialog.
 func (r *ReplyMarkup) Geolocation(text string, quick bool) InlineButton {
 	return InlineButton{
-		Text:  text,
-		Type:  "request_geo_location",
-		Quick: quick,
+		Text:     text,
+		Location: true,
+		Quick:    quick,
 	}
 }
 
 // OpenApp creates a button that opens a MAX mini-app.
-// app is the app identifier, payload is passed to the app on launch,
+// webApp is the app URL/identifier, payload is passed to the app on launch,
 // contactID optionally pins the launch to a specific contact.
-func (r *ReplyMarkup) OpenApp(text, app, payload string, contactID int64) InlineButton {
+func (r *ReplyMarkup) OpenApp(text, webApp, payload string, contactID int64) InlineButton {
 	btn := InlineButton{
-		Text:       text,
-		Type:       "open_app",
-		App:        app,
-		AppPayload: payload,
+		Text:    text,
+		WebApp:  webApp,
+		Payload: payload,
 	}
 	if contactID != 0 {
 		btn.ContactID = contactID
