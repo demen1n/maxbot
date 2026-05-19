@@ -73,19 +73,21 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 			return nil, apiErr
 		}
 
-		var result Message
-		if err := json.Unmarshal(respData, &result); err != nil {
+		var wrapper struct {
+			Message Message `json:"message"`
+		}
+		if err := json.Unmarshal(respData, &wrapper); err != nil {
 			return nil, err
 		}
-		return &result, nil
+		return &wrapper.Message, nil
 	}
 	return nil, lastErr
 }
 
 // editMessageByMid edits a message using MAX message ID (mid), retrying on attachment-not-ready errors.
-func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}) (*Message, error) {
+func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}) error {
 	if mid == "" {
-		return nil, fmt.Errorf("message mid is empty")
+		return fmt.Errorf("message mid is empty")
 	}
 
 	body := map[string]interface{}{}
@@ -93,7 +95,7 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 	case string:
 		body["text"] = v
 	default:
-		return nil, fmt.Errorf("unsupported editable type: %T", what)
+		return fmt.Errorf("unsupported editable type: %T", what)
 	}
 	for _, opt := range opts {
 		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
@@ -111,25 +113,25 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 
 		data, err := json.Marshal(body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		req, err := http.NewRequest("PUT", url, bytes.NewReader(data))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		req.Header.Set("Authorization", b.Token)
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := b.Client.Do(req)
 		if err != nil {
-			return nil, &NetworkError{Op: "editMessage", Err: err}
+			return &NetworkError{Op: "editMessage", Err: err}
 		}
 
 		respData, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if resp.StatusCode != http.StatusOK {
@@ -138,35 +140,40 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 				lastErr = apiErr
 				continue
 			}
-			return nil, apiErr
+			return apiErr
 		}
 
-		var result Message
+		var result SimpleQueryResult
 		if err := json.Unmarshal(respData, &result); err != nil {
-			return nil, err
+			return err
 		}
-		return &result, nil
+		if !result.Success {
+			return errors.New(result.Message)
+		}
+		return nil
 	}
-	return nil, lastErr
+	return lastErr
 }
 
 // editMessage edits a message via API using StoredMessage integer ID.
-func (b *Bot) editMessage(edit *EditMessage) (*Message, error) {
+func (b *Bot) editMessage(edit *EditMessage) error {
 	path := fmt.Sprintf("/messages?message_id=%d", edit.MessageID)
 	body := map[string]interface{}{
 		"text": edit.Text,
 	}
 	data, err := b.Raw("PUT", path, body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var result Message
+	var result SimpleQueryResult
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
+		return err
 	}
-
-	return &result, nil
+	if !result.Success {
+		return errors.New(result.Message)
+	}
+	return nil
 }
 
 // deleteMessage deletes a message via API using its string mid.

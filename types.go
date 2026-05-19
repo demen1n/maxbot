@@ -223,3 +223,9 @@ type UploadInfo struct {
 	URL   string `json:"url"`
 	Token string `json:"token,omitempty"`
 }
+
+// SimpleQueryResult is the response body for write operations that return only success status.
+type SimpleQueryResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}

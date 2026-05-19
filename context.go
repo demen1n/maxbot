@@ -138,8 +138,7 @@ func (c *nativeContext) Edit(what interface{}, opts ...interface{}) error {
 	if msg == nil {
 		return fmt.Errorf("message not found")
 	}
-	_, err := c.b.Edit(msg, what, opts...)
-	return err
+	return c.b.Edit(msg, what, opts...)
 }
 
 // Delete deletes the message that triggered this update.

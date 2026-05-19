@@ -260,7 +260,7 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 
 // Edit edits an existing message.
 // For MAX API, uses message mid for editing.
-func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) (*Message, error) {
+func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) error {
 	if m, ok := msg.(*Message); ok {
 		mid := m.Mid()
 		return b.editMessageByMid(mid, what, opts...)
@@ -276,7 +276,7 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) (*Messag
 	case string:
 		edit.Text = v
 	default:
-		return nil, fmt.Errorf("unsupported editable type: %T", what)
+		return fmt.Errorf("unsupported editable type: %T", what)
 	}
 
 	return b.editMessage(edit)
