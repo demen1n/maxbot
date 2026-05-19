@@ -11,6 +11,7 @@ import (
 const (
 	DefaultAPIURL  = "https://platform-api.max.ru"
 	DefaultTimeout = 10 * time.Second
+	APIVersion     = "1.2.5"
 )
 
 // Common endpoint constants for message routing.

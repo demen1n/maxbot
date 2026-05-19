@@ -8,10 +8,19 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const maxRetries = 4
+
+// addVersionParam appends v=APIVersion to a path that may already have query params.
+func addVersionParam(path string) string {
+	if strings.Contains(path, "?") {
+		return path + "&v=" + APIVersion
+	}
+	return path + "?v=" + APIVersion
+}
 
 // sendMessage sends a message via MAX API, retrying on attachment-not-ready errors.
 func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
@@ -21,7 +30,7 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	} else {
 		recipientParam = "user_id=" + msg.UserID
 	}
-	url := fmt.Sprintf("%s/messages?%s", b.URL, recipientParam)
+	url := fmt.Sprintf("%s%s", b.URL, addVersionParam("/messages?"+recipientParam))
 
 	body := map[string]interface{}{
 		"text": msg.Text,
@@ -104,7 +113,7 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 		}
 	}
 
-	url := fmt.Sprintf("%s/messages?message_id=%s", b.URL, mid)
+	url := fmt.Sprintf("%s%s", b.URL, addVersionParam(fmt.Sprintf("/messages?message_id=%s", mid)))
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -185,15 +194,14 @@ func (b *Bot) deleteMessage(mid string) error {
 
 // getUpdates retrieves updates via long polling.
 func (b *Bot) getUpdates(marker *int64, limit int, timeout int) ([]Update, *int64, error) {
-	url := fmt.Sprintf("%s/updates?timeout=%d", b.URL, timeout)
-
+	path := fmt.Sprintf("/updates?timeout=%d", timeout)
 	if limit > 0 {
-		url += fmt.Sprintf("&limit=%d", limit)
+		path += fmt.Sprintf("&limit=%d", limit)
 	}
-
 	if marker != nil {
-		url += fmt.Sprintf("&marker=%d", *marker)
+		path += fmt.Sprintf("&marker=%d", *marker)
 	}
+	url := b.URL + addVersionParam(path)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -476,7 +484,7 @@ func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
 
 // Raw makes a raw API request.
 func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) {
-	url := b.URL + endpoint
+	url := b.URL + addVersionParam(endpoint)
 
 	var body io.Reader
 	if payload != nil {

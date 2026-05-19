@@ -63,6 +63,27 @@ func TestEditMessageByMidSuccess(t *testing.T) {
 	}
 }
 
+// TASK-11: all requests include v= query param.
+func TestRequestsIncludeAPIVersion(t *testing.T) {
+	var gotV string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotV = r.URL.Query().Get("v")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": map[string]interface{}{
+				"body": map[string]interface{}{"mid": "mid.1", "seq": 1, "text": "hi"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	b.Send(&Chat{ID: 1}, "hi")
+	if gotV != APIVersion {
+		t.Errorf("expected v=%s in request, got %q", APIVersion, gotV)
+	}
+}
+
 // TASK-6: link is a top-level Message field; reply populates ReplyTo.
 func TestMessageLinkParsed(t *testing.T) {
 	raw := `{
