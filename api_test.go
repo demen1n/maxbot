@@ -63,6 +63,33 @@ func TestEditMessageByMidSuccess(t *testing.T) {
 	}
 }
 
+// TASK-6: link is a top-level Message field; reply populates ReplyTo.
+func TestMessageLinkParsed(t *testing.T) {
+	raw := `{
+		"timestamp": 1700000000,
+		"sender": {"user_id": 1, "name": "Alice"},
+		"body": {"mid": "mid.1", "seq": 1, "text": "reply text"},
+		"link": {
+			"type": "reply",
+			"sender": {"user_id": 2, "name": "Bob"},
+			"message": {"mid": "mid.0", "seq": 0, "text": "original"}
+		}
+	}`
+	var msg Message
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if msg.Link == nil {
+		t.Fatal("expected Link to be set")
+	}
+	if msg.ReplyTo == nil {
+		t.Fatal("expected ReplyTo to be set")
+	}
+	if msg.ReplyTo.Text() != "original" {
+		t.Errorf("expected ReplyTo text 'original', got %q", msg.ReplyTo.Text())
+	}
+}
+
 // TASK-4: UploadPhoto uses multipart and parses PhotoTokens response.
 func TestUploadPhotoMultipart(t *testing.T) {
 	// Two servers: one for GET /uploads (getUploadURL), one for the actual upload.
