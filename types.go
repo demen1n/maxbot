@@ -229,3 +229,19 @@ type SimpleQueryResult struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 }
+
+// PhotoToken holds the token for a single uploaded photo.
+type PhotoToken struct {
+	Token string `json:"token"`
+}
+
+// PhotoTokens is the response from a photo upload: a map keyed by photo size/index.
+type PhotoTokens struct {
+	Photos map[string]PhotoToken `json:"photos"`
+}
+
+// UploadedInfo is the response from an audio/video/file upload.
+type UploadedInfo struct {
+	FileID int64  `json:"file_id,omitempty"`
+	Token  string `json:"token,omitempty"`
+}

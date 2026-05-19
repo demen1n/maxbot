@@ -1,11 +1,9 @@
 package maxbot
 
-// Photo represents a photo attachment.
+// Photo represents an uploaded image ready to send.
+// Obtain via Bot.UploadPhoto.
 type Photo struct {
-	FileID string `json:"file_id"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	URL    string `json:"url,omitempty"`
+	PhotoTokens
 }
 
 // Send implements Sendable interface for Photo.
@@ -13,7 +11,7 @@ func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	attachment := Attachment{
 		Type: "image",
 		Payload: map[string]interface{}{
-			"file_id": p.FileID,
+			"photos": p.Photos,
 		},
 	}
 

@@ -63,6 +63,67 @@ func TestEditMessageByMidSuccess(t *testing.T) {
 	}
 }
 
+// TASK-4: UploadPhoto uses multipart and parses PhotoTokens response.
+func TestUploadPhotoMultipart(t *testing.T) {
+	// Two servers: one for GET /uploads (getUploadURL), one for the actual upload.
+	var uploadURL string
+	uploadSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ct := r.Header.Get("Content-Type")
+		if ct == "" || ct == "application/octet-stream" {
+			t.Errorf("expected multipart Content-Type, got %q", ct)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"photos": map[string]interface{}{
+				"0": map[string]interface{}{"token": "photo-token-xyz"},
+			},
+		})
+	}))
+	defer uploadSrv.Close()
+	uploadURL = uploadSrv.URL
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"url": uploadURL})
+	}))
+	defer apiSrv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: apiSrv.URL, Poller: &LongPoller{}})
+	tokens, err := b.UploadPhoto("photo.jpg", []byte("imgdata"))
+	if err != nil {
+		t.Fatalf("UploadPhoto error: %v", err)
+	}
+	if tokens.Photos["0"].Token != "photo-token-xyz" {
+		t.Errorf("unexpected token: %q", tokens.Photos["0"].Token)
+	}
+}
+
+// TASK-4: UploadMedia for file type parses UploadedInfo from response body.
+func TestUploadMediaFile(t *testing.T) {
+	var uploadURL string
+	uploadSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"file_id": 99, "token": "file-token"})
+	}))
+	defer uploadSrv.Close()
+	uploadURL = uploadSrv.URL
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"url": uploadURL})
+	}))
+	defer apiSrv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: apiSrv.URL, Poller: &LongPoller{}})
+	info, err := b.UploadMedia("file", "doc.pdf", []byte("pdfdata"))
+	if err != nil {
+		t.Fatalf("UploadMedia error: %v", err)
+	}
+	if info.Token != "file-token" {
+		t.Errorf("unexpected token: %q", info.Token)
+	}
+}
+
 // TASK-3: respondCallback puts callback_id in query and notification in body.
 func TestRespondCallbackQueryParam(t *testing.T) {
 	var gotCallbackID string

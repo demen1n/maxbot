@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"time"
 )
@@ -298,42 +299,122 @@ func (b *Bot) GetUploadURL(fileType string) (*UploadInfo, error) {
 	return &info, nil
 }
 
-// UploadFile uploads a file to MAX servers.
-func (b *Bot) UploadFile(fileType string, fileName string, fileData []byte) (string, error) {
-	info, err := b.GetUploadURL(fileType)
+// UploadPhoto uploads an image file via multipart/form-data.
+// Returns PhotoTokens containing the uploaded photo tokens.
+func (b *Bot) UploadPhoto(fileName string, data []byte) (*PhotoTokens, error) {
+	info, err := b.GetUploadURL("image")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", info.URL, bytes.NewReader(fileData))
+	body, contentType, err := buildMultipart(fileName, data)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "application/octet-stream")
+	req, err := http.NewRequest("POST", info.URL, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
 
 	resp, err := b.Client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, &NetworkError{Op: "UploadPhoto", Err: err}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("upload failed: %d - %s", resp.StatusCode, string(body))
+		raw, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("upload failed: %d - %s", resp.StatusCode, string(raw))
 	}
 
-	if fileType == "image" || fileType == "file" {
-		var result struct {
-			Token string `json:"token"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var result PhotoTokens
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UploadMedia uploads an audio, video or file via multipart/form-data.
+// fileType must be one of: "audio", "video", "file".
+// For audio/video the token comes from the upload URL response (info.Token).
+// For file the token comes from the upload response body.
+func (b *Bot) UploadMedia(fileType, fileName string, data []byte) (*UploadedInfo, error) {
+	info, err := b.GetUploadURL(fileType)
+	if err != nil {
+		return nil, err
+	}
+
+	body, contentType, err := buildMultipart(fileName, data)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", info.URL, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := b.Client.Do(req)
+	if err != nil {
+		return nil, &NetworkError{Op: "UploadMedia", Err: err}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("upload failed: %d - %s", resp.StatusCode, string(raw))
+	}
+
+	if fileType == "audio" || fileType == "video" {
+		// Token provided by the upload URL endpoint, response body is irrelevant.
+		return &UploadedInfo{Token: info.Token}, nil
+	}
+
+	var result UploadedInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UploadFile is a compatibility wrapper around UploadPhoto/UploadMedia.
+// Deprecated: use UploadPhoto for images and UploadMedia for other types.
+func (b *Bot) UploadFile(fileType string, fileName string, fileData []byte) (string, error) {
+	if fileType == "image" {
+		tokens, err := b.UploadPhoto(fileName, fileData)
+		if err != nil {
 			return "", err
 		}
-		return result.Token, nil
+		for _, t := range tokens.Photos {
+			return t.Token, nil
+		}
+		return "", nil
 	}
-
+	info, err := b.UploadMedia(fileType, fileName, fileData)
+	if err != nil {
+		return "", err
+	}
 	return info.Token, nil
+}
+
+// buildMultipart creates a multipart/form-data body with a single "data" field.
+func buildMultipart(fileName string, data []byte) (*bytes.Buffer, string, error) {
+	buf := &bytes.Buffer{}
+	w := multipart.NewWriter(buf)
+	part, err := w.CreateFormFile("data", fileName)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err = part.Write(data); err != nil {
+		return nil, "", err
+	}
+	if err = w.Close(); err != nil {
+		return nil, "", err
+	}
+	return buf, w.FormDataContentType(), nil
 }
 
 // GetMessages retrieves messages in a chat. chatID is required; count and
