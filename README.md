@@ -117,42 +117,79 @@ b.Handle("/menu", func(c maxbot.Context) error {
     return c.Send("Выберите действие:", menu)
 })
 
-// Обработка нажатий
-menu := &maxbot.ReplyMarkup{}
-b.Handle(&menu.Data("Кнопка 1", "btn1"), func(c maxbot.Context) error {
+// Обработка нажатий — сохраните кнопку в переменную перед передачей в Handle
+btn1 := menu.Data("Кнопка 1", "btn1")
+b.Handle(&btn1, func(c maxbot.Context) error {
     return c.Send("Вы нажали кнопку 1")
 })
 ```
 
+### Типы кнопок
+
+```go
+menu := &maxbot.ReplyMarkup{}
+
+// Callback — отправляет payload боту
+menu.Row(menu.Data("Нажми меня", "my_action"))
+
+// Ссылка
+menu.Row(menu.URL("Открыть сайт", "https://example.com"))
+
+// Запрос контакта / геолокации
+menu.Row(menu.Contact("Поделиться номером"))
+menu.Row(menu.Geolocation("Поделиться локацией", false))
+
+// Мини-приложение
+menu.Row(menu.OpenApp("Открыть", "https://app.example.com", "deeplink", 0))
+
+// Clipboard — копирует текст в буфер обмена
+menu.Row(menu.Clipboard("Скопировать", "текст для копирования"))
+
+// Создание чата
+menu.Row(menu.Chat("Создать группу", "Моя группа", "Описание", "start"))
+
+// Кнопка отправки шаблонного сообщения
+menu.Row(menu.MessageBtn("Отправить"))
+```
+
 ### Отправка файлов
+
+Файлы сначала загружаются на серверы MAX, затем отправляются сообщением.
 
 ```go
 // Фото
-photo := &maxbot.Photo{FileID: "file_id"}
-b.Send(user, photo, &maxbot.SendOptions{
+tokens, err := b.UploadPhoto("photo.jpg", fileData)
+if err != nil {
+    return err
+}
+b.Send(chat, &maxbot.Photo{PhotoTokens: *tokens}, &maxbot.SendOptions{
     Text: "Подпись к фото",
 })
 
-// Документ
-doc := &maxbot.Document{Token: "file_token"}
-b.Send(user, doc)
+// Аудио, видео, файл
+info, err := b.UploadMedia("file", "document.pdf", fileData)
+if err != nil {
+    return err
+}
+b.Send(chat, &maxbot.Document{UploadedInfo: *info})
 
-// Загрузка файла
+// UploadFile — устаревший враппер, оставлен для совместимости
 token, err := b.UploadFile("image", "photo.jpg", fileData)
 ```
 
 ### Редактирование сообщений
 
+`Bot.Edit` и `Context.Edit` возвращают только `error` (не `*Message`).
+
 ```go
 b.Handle("/edit", func(c maxbot.Context) error {
-    msg := c.Message()
     return c.Edit("Отредактированный текст")
 })
 
-// Редактирование с клавиатурой
-menu := &maxbot.ReplyMarkup{}
-menu.Row(menu.Data("Новая кнопка", "new"))
-b.Edit(msg, "Новый текст", menu)
+// Прямое редактирование через бот
+if err := b.Edit(msg, "Новый текст"); err != nil {
+    log.Println(err)
+}
 ```
 
 ### Middleware
@@ -199,6 +236,42 @@ b.Handle("/cmd", handler,
 - `CommandArgs(min, usage)` - проверка минимального числа аргументов
 - `Chain(...)` - объединение нескольких middleware
 
+### Типы обновлений
+
+```go
+// Нажатие кнопки "Начать"
+b.Handle(maxbot.OnBotStarted, func(c maxbot.Context) error {
+    return c.Send("Добро пожаловать! deeplink: " + c.Update().Payload)
+})
+
+// Бот добавлен в чат / удалён из чата
+b.Handle(maxbot.OnBotAdded, func(c maxbot.Context) error {
+    return c.Send("Привет, " + c.Chat().Title + "!")
+})
+b.Handle(maxbot.OnBotRemoved, func(c maxbot.Context) error { return nil })
+
+// Вступление и выход участников
+b.Handle(maxbot.OnUserAdded, func(c maxbot.Context) error {
+    return c.Send("Добро пожаловать, " + c.Sender().Name + "!")
+})
+b.Handle(maxbot.OnUserRemoved, func(c maxbot.Context) error { return nil })
+
+// Изменение названия чата
+b.Handle(maxbot.OnChatTitleChanged, func(c maxbot.Context) error {
+    return c.Send("Чат переименован: " + c.Update().Title)
+})
+
+// Редактирование сообщения
+b.Handle(maxbot.OnMessageEdited, func(c maxbot.Context) error {
+    return nil
+})
+
+// Удаление сообщения
+b.Handle(maxbot.OnMessageRemoved, func(c maxbot.Context) error {
+    return nil
+})
+```
+
 ### Webhook
 
 ```go
@@ -206,7 +279,7 @@ webhook := &maxbot.Webhook{
     Listen:   ":8443",
     Endpoint: "/webhook",
     URL:      "https://example.com/webhook",
-    Secret:   "secret_key",
+    Secret:   "secret_key", // проверяется через X-Max-Bot-Api-Secret
 }
 
 b, err := maxbot.NewBot(maxbot.Settings{
@@ -215,7 +288,10 @@ b, err := maxbot.NewBot(maxbot.Settings{
 })
 
 // Регистрация webhook в MAX API
-b.SetWebhook(webhook.URL, []string{"message", "callback"}, webhook.Secret)
+b.SetWebhook(webhook.URL, []string{"message_created", "message_callback"}, webhook.Secret)
+
+// Удаление webhook (URL обязателен)
+b.DeleteWebhook("https://example.com/webhook")
 ```
 
 ### Работа с чатами
@@ -223,18 +299,29 @@ b.SetWebhook(webhook.URL, []string{"message", "callback"}, webhook.Secret)
 ```go
 // Получить информацию о чате
 chat, err := b.GetChat(chatID)
+chat, err := b.GetChatByLink("mygroup")
+
+// Список чатов с пагинацией
+chats, nextMarker, err := b.GetChats(50, nil)
+
+// Участники с пагинацией
+members, nextMarker, err := b.GetChatMembers(chatID, 100, nil)
 
 // Получить администраторов
-admins, err := b.GetChatAdmins(chatID)
+admins, marker, err := b.GetChatAdmins(chatID)
 
 // Управление участниками
-b.KickChatMember(chatID, userID)
+b.KickChatMember(chatID, userID, false)       // block=false — просто удалить
+b.KickChatMember(chatID, userID, true)        // block=true — забанить
 b.InviteChatMembers(chatID, []int64{user1, user2})
-b.PromoteChatMember(chatID, userID)
+b.PromoteChatMember(chatID, userID)           // все права по умолчанию
+b.PromoteChatMember(chatID, userID, maxbot.PermWrite, maxbot.PermPinMessage)
 b.DemoteChatMember(chatID, userID)
 
 // Закрепление сообщений
-b.PinMessage(chatID, messageID)
+b.PinMessage(chatID, messageID, nil)          // notify=nil — серверное значение по умолчанию
+notify := true
+b.PinMessage(chatID, messageID, &notify)
 b.UnpinMessage(chatID)
 
 // Действия в чате (typing, отправка фото и т.д.)
