@@ -5,21 +5,33 @@ import (
 	"fmt"
 )
 
-// GetChats returns all group chats the bot participates in.
-func (b *Bot) GetChats() ([]Chat, error) {
-	data, err := b.Raw("GET", "/chats", nil)
+// GetChats returns group chats the bot participates in.
+// count limits results (0 = server default); marker is the pagination cursor (*nil = start).
+// Returns chats and the next page marker (nil when no more pages).
+func (b *Bot) GetChats(count int, marker *int64) ([]Chat, *int64, error) {
+	path := "/chats"
+	sep := "?"
+	if count > 0 {
+		path += sep + fmt.Sprintf("count=%d", count)
+		sep = "&"
+	}
+	if marker != nil {
+		path += sep + fmt.Sprintf("marker=%d", *marker)
+	}
+	data, err := b.Raw("GET", path, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response struct {
-		Chats []Chat `json:"chats"`
+		Chats  []Chat `json:"chats"`
+		Marker *int64 `json:"marker"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response.Chats, nil
+	return response.Chats, response.Marker, nil
 }
 
 // GetChat retrieves chat information by ID.
@@ -78,22 +90,31 @@ func (b *Bot) GetChatMemberMe(chatID int64) (*ChatMember, error) {
 	return &member, nil
 }
 
-// GetChatMembers returns all members of a chat.
-func (b *Bot) GetChatMembers(chatID int64) ([]ChatMember, error) {
-	url := fmt.Sprintf("/chats/%d/members", chatID)
-	data, err := b.Raw("GET", url, nil)
+// GetChatMembers returns members of a chat with optional pagination.
+func (b *Bot) GetChatMembers(chatID, count int64, marker *int64) ([]ChatMember, *int64, error) {
+	path := fmt.Sprintf("/chats/%d/members", chatID)
+	sep := "?"
+	if count > 0 {
+		path += sep + fmt.Sprintf("count=%d", count)
+		sep = "&"
+	}
+	if marker != nil {
+		path += sep + fmt.Sprintf("marker=%d", *marker)
+	}
+	data, err := b.Raw("GET", path, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response struct {
 		Members []ChatMember `json:"members"`
+		Marker  *int64       `json:"marker"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response.Members, nil
+	return response.Members, response.Marker, nil
 }
 
 // GetChatMember gets information about a specific chat member.

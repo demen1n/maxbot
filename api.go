@@ -425,18 +425,21 @@ func buildMultipart(fileName string, data []byte) (*bytes.Buffer, string, error)
 	return buf, w.FormDataContentType(), nil
 }
 
-// GetMessages retrieves messages in a chat. chatID is required; count and
-// marker are optional (pass 0 / nil to omit).
-func (b *Bot) GetMessages(chatID int64, count int, marker *int64) ([]Message, *int64, error) {
-	url := fmt.Sprintf("/messages?chat_id=%d", chatID)
+// GetMessages retrieves messages in a chat.
+// from/to are optional timestamp boundaries (pass 0 to omit); count limits results.
+func (b *Bot) GetMessages(chatID int64, count int, from, to int64) ([]Message, *int64, error) {
+	path := fmt.Sprintf("/messages?chat_id=%d", chatID)
 	if count > 0 {
-		url += fmt.Sprintf("&count=%d", count)
+		path += fmt.Sprintf("&count=%d", count)
 	}
-	if marker != nil {
-		url += fmt.Sprintf("&from=%d", *marker)
+	if from > 0 {
+		path += fmt.Sprintf("&from=%d", from)
+	}
+	if to > 0 {
+		path += fmt.Sprintf("&to=%d", to)
 	}
 
-	data, err := b.Raw("GET", url, nil)
+	data, err := b.Raw("GET", path, nil)
 	if err != nil {
 		return nil, nil, err
 	}
