@@ -3,6 +3,7 @@ package maxbot
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 )
 
 // SetWebhook registers a webhook URL with MAX API.
@@ -40,18 +41,15 @@ func (b *Bot) SetWebhook(url string, updateTypes []string, secret string) error 
 	return nil
 }
 
-// DeleteWebhook removes the webhook subscription.
-func (b *Bot) DeleteWebhook() error {
-	data, err := b.Raw("DELETE", "/subscriptions", nil)
+// DeleteWebhook removes the webhook subscription for the given URL.
+func (b *Bot) DeleteWebhook(webhookURL string) error {
+	endpoint := "/subscriptions?url=" + url.QueryEscape(webhookURL)
+	data, err := b.Raw("DELETE", endpoint, nil)
 	if err != nil {
 		return err
 	}
 
-	var result struct {
-		Success bool   `json:"success"`
-		Message string `json:"message,omitempty"`
-	}
-
+	var result SimpleQueryResult
 	if err := json.Unmarshal(data, &result); err != nil {
 		return err
 	}

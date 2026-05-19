@@ -8,6 +8,25 @@ import (
 	"testing"
 )
 
+// TASK-5: DeleteWebhook passes url as query param.
+func TestDeleteWebhookPassesURL(t *testing.T) {
+	var gotURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURL = r.URL.Query().Get("url")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	if err := b.DeleteWebhook("https://example.com/hook"); err != nil {
+		t.Fatalf("DeleteWebhook error: %v", err)
+	}
+	if gotURL != "https://example.com/hook" {
+		t.Errorf("expected url query param, got %q", gotURL)
+	}
+}
+
 func webhookUpdate() []byte {
 	b, _ := json.Marshal(Update{
 		UpdateType: "message_created",
