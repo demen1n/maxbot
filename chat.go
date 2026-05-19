@@ -154,14 +154,26 @@ func (b *Bot) GetChatAdmins(chatID int64) ([]ChatMember, *int64, error) {
 	return response.Members, response.Marker, nil
 }
 
-// PromoteChatMember promotes a user to administrator.
-func (b *Bot) PromoteChatMember(chatID int64, userID int64) error {
-	url := fmt.Sprintf("/chats/%d/members/admins", chatID)
-	payload := map[string]interface{}{
-		"user_id": userID,
+// PromoteChatMember grants admin rights to a user.
+// perms lists the permissions to grant; if empty, all permissions are granted.
+func (b *Bot) PromoteChatMember(chatID, userID int64, perms ...ChatAdminPermission) error {
+	if len(perms) == 0 {
+		perms = []ChatAdminPermission{
+			PermReadAllMessages,
+			PermAddRemoveMembers,
+			PermAddAdmins,
+			PermChangeChatInfo,
+			PermPinMessage,
+			PermWrite,
+		}
 	}
-
-	_, err := b.Raw("POST", url, payload)
+	endpoint := fmt.Sprintf("/chats/%d/members/admins", chatID)
+	payload := map[string]interface{}{
+		"admins": []map[string]interface{}{
+			{"user_id": userID, "permissions": perms},
+		},
+	}
+	_, err := b.Raw("POST", endpoint, payload)
 	return err
 }
 
