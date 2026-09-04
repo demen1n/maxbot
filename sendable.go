@@ -1,20 +1,9 @@
 package maxbot
 
-// Photo represents an uploaded image ready to send.
-// Obtain via Bot.UploadPhoto.
-type Photo struct {
-	PhotoTokens
-}
-
-// Send implements Sendable interface for Photo.
-func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
-	attachment := Attachment{
-		Type: "image",
-		Payload: map[string]interface{}{
-			"photos": p.Photos,
-		},
-	}
-
+// sendAttachment builds and sends a single-attachment message, applying
+// Text/Format/ReplyToMid and any extra attachments (e.g. a keyboard) from
+// opts. Shared by every Sendable implementation below.
+func (b *Bot) sendAttachment(to Recipient, attachment Attachment, opts *SendOptions) (*Message, error) {
 	msg := newSendMessage(to)
 	msg.Attachments = []Attachment{attachment}
 
@@ -28,6 +17,22 @@ func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	}
 
 	return b.sendMessage(msg)
+}
+
+// Photo represents an uploaded image ready to send.
+// Obtain via Bot.UploadPhoto.
+type Photo struct {
+	PhotoTokens
+}
+
+// Send implements Sendable interface for Photo.
+func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
+	return b.sendAttachment(to, Attachment{
+		Type: "image",
+		Payload: map[string]interface{}{
+			"photos": p.Photos,
+		},
+	}, opts)
 }
 
 // Video represents an uploaded video ready to send.
@@ -38,21 +43,10 @@ type Video struct {
 
 // Send implements Sendable interface for Video.
 func (v *Video) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
-	attachment := Attachment{
+	return b.sendAttachment(to, Attachment{
 		Type:    "video",
 		Payload: map[string]interface{}{"token": v.Token},
-	}
-	msg := newSendMessage(to)
-	msg.Attachments = []Attachment{attachment}
-	if opts != nil {
-		msg.Text = opts.Text
-		msg.Format = opts.Format
-		msg.Attachments = append(msg.Attachments, opts.Attachments...)
-		if opts.ReplyToMid != "" {
-			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
-		}
-	}
-	return b.sendMessage(msg)
+	}, opts)
 }
 
 // Audio represents an uploaded audio file ready to send.
@@ -63,21 +57,10 @@ type Audio struct {
 
 // Send implements Sendable interface for Audio.
 func (a *Audio) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
-	attachment := Attachment{
+	return b.sendAttachment(to, Attachment{
 		Type:    "audio",
 		Payload: map[string]interface{}{"token": a.Token},
-	}
-	msg := newSendMessage(to)
-	msg.Attachments = []Attachment{attachment}
-	if opts != nil {
-		msg.Text = opts.Text
-		msg.Format = opts.Format
-		msg.Attachments = append(msg.Attachments, opts.Attachments...)
-		if opts.ReplyToMid != "" {
-			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
-		}
-	}
-	return b.sendMessage(msg)
+	}, opts)
 }
 
 // Document represents an uploaded file ready to send.
@@ -88,21 +71,10 @@ type Document struct {
 
 // Send implements Sendable interface for Document.
 func (d *Document) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
-	attachment := Attachment{
+	return b.sendAttachment(to, Attachment{
 		Type:    "file",
 		Payload: map[string]interface{}{"token": d.Token},
-	}
-	msg := newSendMessage(to)
-	msg.Attachments = []Attachment{attachment}
-	if opts != nil {
-		msg.Text = opts.Text
-		msg.Format = opts.Format
-		msg.Attachments = append(msg.Attachments, opts.Attachments...)
-		if opts.ReplyToMid != "" {
-			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
-		}
-	}
-	return b.sendMessage(msg)
+	}, opts)
 }
 
 // Sticker represents a sticker to send, identified by its code.
@@ -113,21 +85,10 @@ type Sticker struct {
 
 // Send implements Sendable interface for Sticker.
 func (s *Sticker) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
-	attachment := Attachment{
+	return b.sendAttachment(to, Attachment{
 		Type:    "sticker",
 		Payload: map[string]interface{}{"code": s.Code},
-	}
-	msg := newSendMessage(to)
-	msg.Attachments = []Attachment{attachment}
-	if opts != nil {
-		msg.Text = opts.Text
-		msg.Format = opts.Format
-		msg.Attachments = append(msg.Attachments, opts.Attachments...)
-		if opts.ReplyToMid != "" {
-			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
-		}
-	}
-	return b.sendMessage(msg)
+	}, opts)
 }
 
 // Contact represents a contact card to send.
@@ -151,18 +112,7 @@ func (c *Contact) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error
 	if c.VCFPhone != "" {
 		payload["vcf_phone"] = c.VCFPhone
 	}
-	attachment := Attachment{Type: "contact", Payload: payload}
-	msg := newSendMessage(to)
-	msg.Attachments = []Attachment{attachment}
-	if opts != nil {
-		msg.Text = opts.Text
-		msg.Format = opts.Format
-		msg.Attachments = append(msg.Attachments, opts.Attachments...)
-		if opts.ReplyToMid != "" {
-			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
-		}
-	}
-	return b.sendMessage(msg)
+	return b.sendAttachment(to, Attachment{Type: "contact", Payload: payload}, opts)
 }
 
 // Location represents a geographic point to send.
@@ -175,18 +125,7 @@ type Location struct {
 // Per spec latitude/longitude are top-level attachment fields, not payload.
 func (l *Location) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
 	lat, lon := l.Latitude, l.Longitude
-	attachment := Attachment{Type: "location", Latitude: &lat, Longitude: &lon}
-	msg := newSendMessage(to)
-	msg.Attachments = []Attachment{attachment}
-	if opts != nil {
-		msg.Text = opts.Text
-		msg.Format = opts.Format
-		msg.Attachments = append(msg.Attachments, opts.Attachments...)
-		if opts.ReplyToMid != "" {
-			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
-		}
-	}
-	return b.sendMessage(msg)
+	return b.sendAttachment(to, Attachment{Type: "location", Latitude: &lat, Longitude: &lon}, opts)
 }
 
 // Share attaches a media preview of an external URL to a message.
@@ -196,19 +135,8 @@ type Share struct {
 
 // Send implements Sendable interface for Share.
 func (s *Share) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
-	attachment := Attachment{
+	return b.sendAttachment(to, Attachment{
 		Type:    "share",
 		Payload: map[string]interface{}{"url": s.URL},
-	}
-	msg := newSendMessage(to)
-	msg.Attachments = []Attachment{attachment}
-	if opts != nil {
-		msg.Text = opts.Text
-		msg.Format = opts.Format
-		msg.Attachments = append(msg.Attachments, opts.Attachments...)
-		if opts.ReplyToMid != "" {
-			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
-		}
-	}
-	return b.sendMessage(msg)
+	}, opts)
 }
