@@ -10,6 +10,11 @@ import (
 // GetChats returns group chats the bot participates in.
 // count limits results (0 = server default); marker is the pagination cursor (*nil = start).
 // Returns chats and the next page marker (nil when no more pages).
+//
+// Deprecated: as of June 2026 MAX no longer supports GET /chats and provides
+// no replacement for listing all chats the bot is in. Track chat_id yourself
+// from incoming updates (bot_added, bot_started, message_created, etc.) and
+// use GetChat for lookups instead.
 func (b *Bot) GetChats(count int, marker *int64) ([]Chat, *int64, error) {
 	path := "/chats"
 	sep := "?"

@@ -301,7 +301,10 @@ b.DeleteWebhook("https://example.com/webhook")
 chat, err := b.GetChat(chatID)
 chat, err := b.GetChatByLink("mygroup")
 
-// Список чатов с пагинацией
+// Список чатов с пагинацией.
+// Deprecated: с июня 2026 GET /chats больше не поддерживается MAX API.
+// Замены на стороне API нет — собирайте chat_id сами из входящих апдейтов
+// (bot_added, bot_started, message_created и т.д.) и храните их в своей БД.
 chats, nextMarker, err := b.GetChats(50, nil)
 
 // Участники с пагинацией
