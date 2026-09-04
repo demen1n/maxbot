@@ -251,6 +251,12 @@ func TestOnlyPrivateAndOnlyGroups(t *testing.T) {
 		t.Errorf("expected channel chat to pass OnlyGroups, sent=%v err=%v", c2.sent, err)
 	}
 
+	// MAX's real group-chat ChatType value is "chat", not "group".
+	c4 := &fakeContext{chat: &maxbot.Chat{Type: "chat"}}
+	if err := groups(c4); err != nil || len(c4.sent) != 0 {
+		t.Errorf("expected group chat (type=chat) to pass OnlyGroups, sent=%v err=%v", c4.sent, err)
+	}
+
 	c3 := &fakeContext{chat: &maxbot.Chat{Type: "dialog"}}
 	if err := groups(c3); err != nil || len(c3.sent) != 1 {
 		t.Errorf("expected dialog chat to be rejected by OnlyGroups, sent=%v err=%v", c3.sent, err)

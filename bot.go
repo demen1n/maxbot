@@ -341,6 +341,11 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) error {
 	default:
 		return fmt.Errorf("unsupported editable type: %T", what)
 	}
+	for _, opt := range opts {
+		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
+			edit.Format = o.Format
+		}
+	}
 
 	return b.editMessage(edit)
 }

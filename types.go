@@ -274,7 +274,12 @@ const (
 	PermAddAdmins        ChatAdminPermission = "add_admins"
 	PermChangeChatInfo   ChatAdminPermission = "change_chat_info"
 	PermPinMessage       ChatAdminPermission = "pin_message"
+	PermEditLink         ChatAdminPermission = "edit_link"
 	PermWrite            ChatAdminPermission = "write"
+	PermEdit             ChatAdminPermission = "edit"
+	PermDelete           ChatAdminPermission = "delete"
+	PermCanCall          ChatAdminPermission = "can_call"
+	PermViewStats        ChatAdminPermission = "view_stats"
 )
 
 // ChatMember represents a chat participant.

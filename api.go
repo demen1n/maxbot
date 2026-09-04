@@ -32,17 +32,15 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	}
 	url := fmt.Sprintf("%s%s", b.URL, addVersionParam("/messages?"+recipientParam))
 
+	// NewMessageBody requires text/attachments/link to be present (each is
+	// nullable, but the key itself is required) -- always include them.
 	body := map[string]interface{}{
-		"text": msg.Text,
+		"text":        msg.Text,
+		"attachments": msg.Attachments,
+		"link":        msg.Link,
 	}
 	if msg.Format != "" {
 		body["format"] = msg.Format
-	}
-	if len(msg.Attachments) > 0 {
-		body["attachments"] = msg.Attachments
-	}
-	if msg.Link != nil {
-		body["link"] = msg.Link
 	}
 
 	var lastErr error
@@ -101,7 +99,13 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 		return fmt.Errorf("message mid is empty")
 	}
 
-	body := map[string]interface{}{}
+	// NewMessageBody requires attachments/link to be present (nullable);
+	// nil here means "leave attachments/link unchanged", per the API's own
+	// edit semantics -- exactly what a text-only edit intends.
+	body := map[string]interface{}{
+		"attachments": nil,
+		"link":        nil,
+	}
 	switch v := what.(type) {
 	case string:
 		body["text"] = v
@@ -170,8 +174,15 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 // editMessage edits a message via API using StoredMessage's mid.
 func (b *Bot) editMessage(edit *EditMessage) error {
 	path := "/messages?message_id=" + edit.MessageID
+	// NewMessageBody requires attachments/link to be present (nullable);
+	// nil means "leave unchanged", matching this text-only edit.
 	body := map[string]interface{}{
-		"text": edit.Text,
+		"text":        edit.Text,
+		"attachments": nil,
+		"link":        nil,
+	}
+	if edit.Format != "" {
+		body["format"] = edit.Format
 	}
 	data, err := b.Raw("PUT", path, body)
 	if err != nil {
@@ -203,8 +214,8 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) 
 	if marker != nil {
 		path += fmt.Sprintf("&marker=%d", *marker)
 	}
-	for _, t := range types {
-		path += "&types[]=" + t
+	if len(types) > 0 {
+		path += "&types=" + strings.Join(types, ",")
 	}
 	url := b.URL + addVersionParam(path)
 
@@ -276,9 +287,15 @@ func (b *Bot) Me() (*User, error) {
 // Commands are not part of this: MAX exposes a dedicated PATCH /me/commands
 // endpoint for them (see SetCommands).
 type BotPatch struct {
+	// Name sets the bot's visible name. Deprecated by MAX in favor of
+	// FirstName; kept for compatibility with existing callers.
 	Name        string `json:"name,omitempty"`
-	Username    string `json:"username,omitempty"`
+	FirstName   string `json:"first_name,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Commands replaces the bot's command list. Pass an empty (non-nil)
+	// slice to remove all commands; prefer SetCommands/DeleteCommands,
+	// which use the dedicated PATCH /me/commands endpoint instead.
+	Commands []BotCommand `json:"commands,omitempty"`
 }
 
 // PatchBot updates bot properties via PATCH /me.
@@ -448,6 +465,10 @@ func buildMultipart(fileName string, data []byte) (*bytes.Buffer, string, error)
 
 // GetMessages retrieves messages in a chat.
 // from/to are optional timestamp boundaries (pass 0 to omit); count limits results.
+// The returned marker may always be nil: MAX's own MessageList response
+// schema declares only "messages", even though the endpoint's own
+// description mentions marker-based pagination -- this passes it through
+// if the server does send one, without assuming it will.
 func (b *Bot) GetMessages(chatID int64, count int, from, to int64) ([]Message, *int64, error) {
 	path := fmt.Sprintf("/messages?chat_id=%d", chatID)
 	if count > 0 {

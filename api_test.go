@@ -50,6 +50,27 @@ func TestSendMessageUnwrapsEnvelope(t *testing.T) {
 	}
 }
 
+// NewMessageBody requires the "attachments" and "link" keys to be present
+// (nullable, but required) even when there's nothing to send.
+func TestSendMessageAlwaysIncludesRequiredKeys(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"message": map[string]interface{}{}})
+	}))
+
+	if _, err := b.Send(&Chat{ID: 1}, "hi"); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if v, ok := gotBody["attachments"]; !ok || v != nil {
+		t.Errorf("expected attachments key present and null, got %+v (present=%v)", v, ok)
+	}
+	if v, ok := gotBody["link"]; !ok || v != nil {
+		t.Errorf("expected link key present and null, got %+v (present=%v)", v, ok)
+	}
+}
+
 // TASK-1: editMessageByMid must return nil on success:true.
 func TestEditMessageByMidSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +83,29 @@ func TestEditMessageByMidSuccess(t *testing.T) {
 	msg := &Message{Body: &MessageBody{Mid: "mid.abc"}}
 	if err := b.Edit(msg, "new text"); err != nil {
 		t.Errorf("Edit error: %v", err)
+	}
+}
+
+// A text-only edit must still send explicit nulls for attachments/link (both
+// required keys, per NewMessageBody) meaning "leave them unchanged" -- not
+// omit the keys entirely.
+func TestEditMessageByMidIncludesNullAttachmentsAndLink(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	msg := &Message{Body: &MessageBody{Mid: "mid.abc"}}
+	if err := b.Edit(msg, "new text"); err != nil {
+		t.Fatalf("Edit error: %v", err)
+	}
+	if v, ok := gotBody["attachments"]; !ok || v != nil {
+		t.Errorf("expected attachments key present and null, got %+v (present=%v)", v, ok)
+	}
+	if v, ok := gotBody["link"]; !ok || v != nil {
+		t.Errorf("expected link key present and null, got %+v (present=%v)", v, ok)
 	}
 }
 
@@ -292,6 +336,30 @@ func TestEditStoredMessage(t *testing.T) {
 	if gotBody["text"] != "updated text" {
 		t.Errorf("expected text=updated text, got %+v", gotBody)
 	}
+	if v, ok := gotBody["attachments"]; !ok || v != nil {
+		t.Errorf("expected attachments key present and null, got %+v (present=%v)", v, ok)
+	}
+	if v, ok := gotBody["link"]; !ok || v != nil {
+		t.Errorf("expected link key present and null, got %+v (present=%v)", v, ok)
+	}
+}
+
+// Editing a StoredMessage with a *SendOptions Format must pass it through --
+// previously no code path threaded opts into the StoredMessage edit at all.
+func TestEditStoredMessagePassesFormat(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	sm := &StoredMessage{MessageID: "mid.5", ChatID: 42}
+	if err := b.Edit(sm, "**bold**", &SendOptions{Format: "markdown"}); err != nil {
+		t.Fatalf("Edit error: %v", err)
+	}
+	if gotBody["format"] != "markdown" {
+		t.Errorf("expected format=markdown, got %+v", gotBody["format"])
+	}
 }
 
 func TestEditStoredMessageUnsupportedType(t *testing.T) {
@@ -348,7 +416,7 @@ func TestGetUpdatesBuildsQueryAndParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getUpdates error: %v", err)
 	}
-	if gotQuery != fmt.Sprintf("timeout=30&limit=5&marker=10&types[]=message_created&types[]=bot_started&v=%s", APIVersion) {
+	if gotQuery != fmt.Sprintf("timeout=30&limit=5&marker=10&types=message_created,bot_started&v=%s", APIVersion) {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(updates) != 1 || updates[0].UpdateType != "message_created" {
@@ -395,9 +463,23 @@ func TestPatchBot(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"user_id": 1, "name": "New name"})
 	}))
-	user, err := b.PatchBot(BotPatch{Name: "New name"})
+	user, err := b.PatchBot(BotPatch{
+		Name:      "New name",
+		FirstName: "New",
+		Commands:  []BotCommand{{Name: "start", Description: "Start"}},
+	})
 	if err != nil {
 		t.Fatalf("PatchBot error: %v", err)
+	}
+	if gotBody["first_name"] != "New" {
+		t.Errorf("expected first_name in body, got %+v", gotBody)
+	}
+	if _, hasUsername := gotBody["username"]; hasUsername {
+		t.Error("username is not a real BotPatch field; must not be serialized")
+	}
+	cmds, ok := gotBody["commands"].([]interface{})
+	if !ok || len(cmds) != 1 {
+		t.Errorf("expected 1 command in body, got %+v", gotBody["commands"])
 	}
 	if gotMethod != http.MethodPatch || gotPath != "/me" {
 		t.Errorf("expected PATCH /me, got %s %s", gotMethod, gotPath)
