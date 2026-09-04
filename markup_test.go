@@ -80,6 +80,23 @@ func TestReplyMarkupOpenAppContactID(t *testing.T) {
 	}
 }
 
+// ChatButton.uuid is a JSON integer per the MAX API schema, not a string --
+// reused across message edits so the button doesn't spawn a new chat.
+func TestChatButtonUUIDMarshalsAsInteger(t *testing.T) {
+	rm := &ReplyMarkup{}
+	btn := rm.Chat("New Chat", "My Group", "desc", "start")
+	btn.ChatUUID = 123456789
+
+	m := marshalBtn(t, btn)
+	uuid, ok := m["uuid"].(float64)
+	if !ok {
+		t.Fatalf("expected uuid to decode as a JSON number, got %T (%v)", m["uuid"], m["uuid"])
+	}
+	if uuid != 123456789 {
+		t.Errorf("expected uuid=123456789, got %v", uuid)
+	}
+}
+
 // ReplyButton.MarshalJSON auto-sets "type" based on filled fields.
 func TestReplyButtonMarshalJSON(t *testing.T) {
 	kb := &ReplyKeyboard{}
@@ -166,8 +183,11 @@ func TestNewButtonTypesMarshal(t *testing.T) {
 			btn:      rm.Clipboard("Copy", "copy-text"),
 			wantType: "clipboard",
 			check: func(t *testing.T, m map[string]interface{}) {
-				if m["clipboard_payload"] != "copy-text" {
-					t.Errorf("expected clipboard_payload=copy-text, got %v", m["clipboard_payload"])
+				if m["payload"] != "copy-text" {
+					t.Errorf("expected payload=copy-text, got %v", m["payload"])
+				}
+				if _, ok := m["clipboard_payload"]; ok {
+					t.Error("clipboard_payload is not a real MAX API field; must not be serialized")
 				}
 			},
 		},

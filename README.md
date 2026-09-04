@@ -11,7 +11,7 @@
 ## Ссылки
 
 - 📖 [Официальная документация MAX API](https://dev.max.ru/docs-api)
-- 🏛️ [Официальная библиотека MAX](https://github.com/mail-ru-im/bot-golang)
+- 🏛️ [Официальная библиотека MAX](https://github.com/max-messenger/max-bot-api-client-go)
 - 🤖 [telebot - вдохновение для этой библиотеки](https://github.com/tucnak/telebot)
 
 ## Возможности

@@ -439,8 +439,10 @@ func TestGetPinnedMessage(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"timestamp": 1,
-			"body":      map[string]interface{}{"mid": "mid.1", "text": "pinned"},
+			"message": map[string]interface{}{
+				"timestamp": 1,
+				"body":      map[string]interface{}{"mid": "mid.1", "text": "pinned"},
+			},
 		})
 	}))
 	defer srv.Close()
@@ -450,8 +452,25 @@ func TestGetPinnedMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPinnedMessage error: %v", err)
 	}
-	if msg.Text() != "pinned" {
-		t.Errorf("expected text=pinned, got %q", msg.Text())
+	if msg == nil || msg.Text() != "pinned" {
+		t.Errorf("expected text=pinned, got %+v", msg)
+	}
+}
+
+func TestGetPinnedMessageNone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"message": nil})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	msg, err := b.GetPinnedMessage(1)
+	if err != nil {
+		t.Fatalf("GetPinnedMessage error: %v", err)
+	}
+	if msg != nil {
+		t.Errorf("expected nil message when nothing is pinned, got %+v", msg)
 	}
 }
 

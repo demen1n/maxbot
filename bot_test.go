@@ -41,6 +41,44 @@ func TestSendableHonorsReplyKeyboard(t *testing.T) {
 	}
 }
 
+// Per the MAX API schema (ReplyKeyboardAttachmentRequest), buttons/direct/
+// direct_user_id are top-level attachment fields, not nested under "payload"
+// like most other attachment types.
+func TestReplyKeyboardWireShapeIsTopLevel(t *testing.T) {
+	var gotAttachments []map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Attachments []map[string]interface{} `json:"attachments"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		gotAttachments = body.Attachments
+		json.NewEncoder(w).Encode(map[string]interface{}{"message": map[string]interface{}{}})
+	}))
+
+	kb := &ReplyKeyboard{Direct: true, DirectUserID: 42}
+	kb.Row(kb.Message("Hi", "hi"))
+	if _, err := b.Send(&User{ID: 1}, "hello", kb); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+
+	if len(gotAttachments) != 1 {
+		t.Fatalf("expected 1 attachment, got %+v", gotAttachments)
+	}
+	att := gotAttachments[0]
+	if _, hasPayload := att["payload"]; hasPayload {
+		t.Errorf("reply_keyboard must not wrap fields in payload, got %+v", att)
+	}
+	if _, ok := att["buttons"]; !ok {
+		t.Errorf("expected top-level buttons field, got %+v", att)
+	}
+	if att["direct"] != true {
+		t.Errorf("expected top-level direct=true, got %+v", att["direct"])
+	}
+	if att["direct_user_id"] != float64(42) {
+		t.Errorf("expected top-level direct_user_id=42, got %+v", att["direct_user_id"])
+	}
+}
+
 func TestMatchCallbackRouting(t *testing.T) {
 	b := makeBot(t)
 

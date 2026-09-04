@@ -282,12 +282,12 @@ func TestEditStoredMessage(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
 	}))
 
-	sm := &StoredMessage{MessageID: 5, ChatID: 42}
+	sm := &StoredMessage{MessageID: "mid.5", ChatID: 42}
 	if err := b.Edit(sm, "updated text"); err != nil {
 		t.Fatalf("Edit error: %v", err)
 	}
-	if gotPath != "/messages?message_id=5&v="+APIVersion {
-		t.Errorf("expected path /messages?message_id=5, got %q", gotPath)
+	if gotPath != "/messages?message_id=mid.5&v="+APIVersion {
+		t.Errorf("expected path /messages?message_id=mid.5, got %q", gotPath)
 	}
 	if gotBody["text"] != "updated text" {
 		t.Errorf("expected text=updated text, got %+v", gotBody)
@@ -298,13 +298,13 @@ func TestEditStoredMessageUnsupportedType(t *testing.T) {
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
 	}))
-	sm := &StoredMessage{MessageID: 5, ChatID: 42}
+	sm := &StoredMessage{MessageID: "mid.5", ChatID: 42}
 	if err := b.Edit(sm, 123); err == nil {
 		t.Fatal("expected error for unsupported editable payload type, got nil")
 	}
 }
 
-// Delete on a StoredMessage must go through deleteMessage using its int ID.
+// Delete on a StoredMessage must go through deleteMessage using its mid.
 func TestDeleteStoredMessage(t *testing.T) {
 	var gotPath string
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -312,12 +312,12 @@ func TestDeleteStoredMessage(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
 	}))
 
-	sm := &StoredMessage{MessageID: 7, ChatID: 42}
+	sm := &StoredMessage{MessageID: "mid.7", ChatID: 42}
 	if err := b.Delete(sm); err != nil {
 		t.Fatalf("Delete error: %v", err)
 	}
-	if gotPath != "/messages?message_id=7&v="+APIVersion {
-		t.Errorf("expected path /messages?message_id=7, got %q", gotPath)
+	if gotPath != "/messages?message_id=mid.7&v="+APIVersion {
+		t.Errorf("expected path /messages?message_id=mid.7, got %q", gotPath)
 	}
 }
 

@@ -167,9 +167,9 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 	return lastErr
 }
 
-// editMessage edits a message via API using StoredMessage integer ID.
+// editMessage edits a message via API using StoredMessage's mid.
 func (b *Bot) editMessage(edit *EditMessage) error {
-	path := fmt.Sprintf("/messages?message_id=%d", edit.MessageID)
+	path := "/messages?message_id=" + edit.MessageID
 	body := map[string]interface{}{
 		"text": edit.Text,
 	}

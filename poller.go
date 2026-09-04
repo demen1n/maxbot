@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -75,6 +76,7 @@ func (w *Webhook) Poll(b *Bot, updates chan Update, stop chan struct{}) {
 		w.Endpoint = "/webhook"
 	}
 
+	var pending sync.WaitGroup
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(w.Endpoint, func(rw http.ResponseWriter, r *http.Request) {
@@ -101,8 +103,14 @@ func (w *Webhook) Poll(b *Bot, updates chan Update, stop chan struct{}) {
 		case updates <- update:
 		default:
 			// Buffer full: dispatch in background so the HTTP response
-			// returns immediately and MAX doesn't retry.
-			go func(u Update) { updates <- u }(update)
+			// returns immediately and MAX doesn't retry. Poll waits for
+			// this to finish before closing updates, so the send can
+			// never race the channel close.
+			pending.Add(1)
+			go func(u Update) {
+				defer pending.Done()
+				updates <- u
+			}(update)
 		}
 		rw.WriteHeader(http.StatusOK)
 	})
@@ -128,5 +136,6 @@ func (w *Webhook) Poll(b *Bot, updates chan Update, stop chan struct{}) {
 		b.log("Webhook server shutdown error: %v", err)
 	}
 
+	pending.Wait()
 	close(updates)
 }
