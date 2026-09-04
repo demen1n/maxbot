@@ -27,6 +27,70 @@ func TestDeleteWebhookPassesURL(t *testing.T) {
 	}
 }
 
+func TestSetWebhookSuccess(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	err := b.SetWebhook("https://example.com/hook", []string{"message_created"}, "s3cr3t")
+	if err != nil {
+		t.Fatalf("SetWebhook error: %v", err)
+	}
+	if gotBody["url"] != "https://example.com/hook" {
+		t.Errorf("expected url in body, got %+v", gotBody)
+	}
+	if gotBody["secret"] != "s3cr3t" {
+		t.Errorf("expected secret in body, got %+v", gotBody)
+	}
+	types, ok := gotBody["update_types"].([]interface{})
+	if !ok || len(types) != 1 || types[0] != "message_created" {
+		t.Errorf("expected update_types in body, got %+v", gotBody["update_types"])
+	}
+}
+
+func TestSetWebhookFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "message": "invalid url"})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	err := b.SetWebhook("bad-url", nil, "")
+	if err == nil {
+		t.Fatal("expected error on success:false")
+	}
+}
+
+func TestGetWebhook(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/subscriptions" {
+			t.Errorf("expected path /subscriptions, got %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"subscriptions": []map[string]interface{}{
+				{"url": "https://example.com/hook", "update_types": []string{"message_created"}},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
+	hooks, err := b.GetWebhook()
+	if err != nil {
+		t.Fatalf("GetWebhook error: %v", err)
+	}
+	if len(hooks) != 1 || hooks[0].URL != "https://example.com/hook" {
+		t.Fatalf("unexpected hooks: %+v", hooks)
+	}
+}
+
 func webhookUpdate() []byte {
 	b, _ := json.Marshal(Update{
 		UpdateType: "message_created",

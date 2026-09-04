@@ -44,6 +44,53 @@ func TestSendableHonorsReplyToMid(t *testing.T) {
 	}
 }
 
+func TestPhotoSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	p := &Photo{PhotoTokens: PhotoTokens{Photos: map[string]PhotoToken{"0": {Token: "photo-tok"}}}}
+	if _, err := b.Send(&User{ID: 1}, p); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Type != "image" {
+		t.Fatalf("expected 1 image attachment, got %+v", *got)
+	}
+}
+
+func TestVideoSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	v := &Video{UploadedInfo: UploadedInfo{Token: "video-tok"}}
+	if _, err := b.Send(&User{ID: 1}, v); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Type != "video" {
+		t.Fatalf("expected 1 video attachment, got %+v", *got)
+	}
+	if (*got)[0].Payload["token"] != "video-tok" {
+		t.Errorf("expected token=video-tok, got %v", (*got)[0].Payload["token"])
+	}
+}
+
+func TestAudioSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	a := &Audio{UploadedInfo: UploadedInfo{Token: "audio-tok"}}
+	if _, err := b.Send(&User{ID: 1}, a); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Type != "audio" {
+		t.Fatalf("expected 1 audio attachment, got %+v", *got)
+	}
+}
+
+func TestDocumentSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	d := &Document{UploadedInfo: UploadedInfo{Token: "doc-tok"}}
+	if _, err := b.Send(&User{ID: 1}, d); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Type != "file" {
+		t.Fatalf("expected 1 file attachment, got %+v", *got)
+	}
+}
+
 func TestStickerSendPayload(t *testing.T) {
 	b, got := captureAttachments(t)
 	if _, err := b.Send(&User{ID: 1}, &Sticker{Code: "smile"}); err != nil {

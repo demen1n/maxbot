@@ -2,6 +2,8 @@ package maxbot
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -266,5 +268,287 @@ func TestDeleteCommandsSendsEmptyArray(t *testing.T) {
 	}
 	if len(cmds) != 0 {
 		t.Errorf("expected empty commands array, got %+v", cmds)
+	}
+}
+
+// Edit on a StoredMessage (not *Message) must go through editMessage,
+// using message_id/chat_id instead of mid.
+func TestEditStoredMessage(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path + "?" + r.URL.RawQuery
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	sm := &StoredMessage{MessageID: 5, ChatID: 42}
+	if err := b.Edit(sm, "updated text"); err != nil {
+		t.Fatalf("Edit error: %v", err)
+	}
+	if gotPath != "/messages?message_id=5&v="+APIVersion {
+		t.Errorf("expected path /messages?message_id=5, got %q", gotPath)
+	}
+	if gotBody["text"] != "updated text" {
+		t.Errorf("expected text=updated text, got %+v", gotBody)
+	}
+}
+
+func TestEditStoredMessageUnsupportedType(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+	sm := &StoredMessage{MessageID: 5, ChatID: 42}
+	if err := b.Edit(sm, 123); err == nil {
+		t.Fatal("expected error for unsupported editable payload type, got nil")
+	}
+}
+
+// Delete on a StoredMessage must go through deleteMessage using its int ID.
+func TestDeleteStoredMessage(t *testing.T) {
+	var gotPath string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path + "?" + r.URL.RawQuery
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	sm := &StoredMessage{MessageID: 7, ChatID: 42}
+	if err := b.Delete(sm); err != nil {
+		t.Fatalf("Delete error: %v", err)
+	}
+	if gotPath != "/messages?message_id=7&v="+APIVersion {
+		t.Errorf("expected path /messages?message_id=7, got %q", gotPath)
+	}
+}
+
+func TestDeleteMessageEmptyMid(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("no request should be made when mid is empty")
+	}))
+	if err := b.Delete(&Message{Body: &MessageBody{}}); err == nil {
+		t.Fatal("expected error for empty mid, got nil")
+	}
+}
+
+func TestGetUpdatesBuildsQueryAndParses(t *testing.T) {
+	var gotQuery string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"updates": []map[string]interface{}{
+				{"update_type": "message_created", "timestamp": 1},
+			},
+			"marker": 123,
+		})
+	}))
+
+	marker := int64(10)
+	updates, next, err := b.getUpdates(&marker, 5, 30, []string{"message_created", "bot_started"})
+	if err != nil {
+		t.Fatalf("getUpdates error: %v", err)
+	}
+	if gotQuery != fmt.Sprintf("timeout=30&limit=5&marker=10&types[]=message_created&types[]=bot_started&v=%s", APIVersion) {
+		t.Errorf("unexpected query: %q", gotQuery)
+	}
+	if len(updates) != 1 || updates[0].UpdateType != "message_created" {
+		t.Fatalf("unexpected updates: %+v", updates)
+	}
+	if next == nil || *next != 123 {
+		t.Errorf("expected marker 123, got %v", next)
+	}
+}
+
+func TestGetUpdatesAPIError(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "boom", "code": "internal"})
+	}))
+	if _, _, err := b.getUpdates(nil, 0, 30, nil); err == nil {
+		t.Fatal("expected error on non-200 response, got nil")
+	}
+}
+
+func TestMe(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me" {
+			t.Errorf("expected path /me, got %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"user_id": 1, "name": "Bot"})
+	}))
+	user, err := b.Me()
+	if err != nil {
+		t.Fatalf("Me error: %v", err)
+	}
+	if user.Name != "Bot" {
+		t.Errorf("expected name=Bot, got %q", user.Name)
+	}
+}
+
+func TestPatchBot(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"user_id": 1, "name": "New name"})
+	}))
+	user, err := b.PatchBot(BotPatch{Name: "New name"})
+	if err != nil {
+		t.Fatalf("PatchBot error: %v", err)
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/me" {
+		t.Errorf("expected PATCH /me, got %s %s", gotMethod, gotPath)
+	}
+	if gotBody["name"] != "New name" {
+		t.Errorf("expected name in body, got %+v", gotBody)
+	}
+	if user.Name != "New name" {
+		t.Errorf("expected name=New name, got %q", user.Name)
+	}
+}
+
+func TestUploadFileImageDelegatesToUploadPhoto(t *testing.T) {
+	uploadSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"photos": map[string]interface{}{"0": map[string]interface{}{"token": "photo-tok"}},
+		})
+	}))
+	defer uploadSrv.Close()
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"url": uploadSrv.URL})
+	}))
+	defer apiSrv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: apiSrv.URL, Poller: &LongPoller{}})
+	token, err := b.UploadFile("image", "photo.jpg", []byte("data"))
+	if err != nil {
+		t.Fatalf("UploadFile error: %v", err)
+	}
+	if token != "photo-tok" {
+		t.Errorf("expected token=photo-tok, got %q", token)
+	}
+}
+
+func TestUploadFileNonImageDelegatesToUploadMedia(t *testing.T) {
+	uploadSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"token": "file-tok"})
+	}))
+	defer uploadSrv.Close()
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"url": uploadSrv.URL})
+	}))
+	defer apiSrv.Close()
+
+	b, _ := NewBot(Settings{Token: "tok", URL: apiSrv.URL, Poller: &LongPoller{}})
+	token, err := b.UploadFile("file", "doc.pdf", []byte("data"))
+	if err != nil {
+		t.Fatalf("UploadFile error: %v", err)
+	}
+	if token != "file-tok" {
+		t.Errorf("expected token=file-tok, got %q", token)
+	}
+}
+
+func TestGetMessagesBuildsQuery(t *testing.T) {
+	var gotQuery string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"messages": []map[string]interface{}{
+				{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.1", "text": "hi"}},
+			},
+		})
+	}))
+	msgs, _, err := b.GetMessages(42, 10, 100, 200)
+	if err != nil {
+		t.Fatalf("GetMessages error: %v", err)
+	}
+	if gotQuery != fmt.Sprintf("chat_id=42&count=10&from=100&to=200&v=%s", APIVersion) {
+		t.Errorf("unexpected query: %q", gotQuery)
+	}
+	if len(msgs) != 1 || msgs[0].Text() != "hi" {
+		t.Fatalf("unexpected messages: %+v", msgs)
+	}
+}
+
+func TestGetMessage(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/messages/mid.1" {
+			t.Errorf("expected path /messages/mid.1, got %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"timestamp": 1,
+			"body":      map[string]interface{}{"mid": "mid.1", "text": "hello"},
+		})
+	}))
+	msg, err := b.GetMessage("mid.1")
+	if err != nil {
+		t.Fatalf("GetMessage error: %v", err)
+	}
+	if msg.Text() != "hello" {
+		t.Errorf("expected text=hello, got %q", msg.Text())
+	}
+}
+
+func TestGetVideoInfo(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/videos/tok123" {
+			t.Errorf("expected path /videos/tok123, got %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"width": 1920, "height": 1080})
+	}))
+	info, err := b.GetVideoInfo("tok123")
+	if err != nil {
+		t.Fatalf("GetVideoInfo error: %v", err)
+	}
+	if info["width"] != float64(1920) {
+		t.Errorf("expected width=1920, got %v", info["width"])
+	}
+}
+
+func TestParseAPIErrorStructured(t *testing.T) {
+	body := []byte(`{"error":"bad_request","code":"invalid.chat_id","message":"chat not found"}`)
+	err := parseAPIError(http.StatusBadRequest, body)
+	if err.Code != http.StatusBadRequest {
+		t.Errorf("expected Code=400, got %d", err.Code)
+	}
+	if err.ErrorText != "bad_request" || err.Message != "invalid.chat_id" || err.Details != "chat not found" {
+		t.Errorf("unexpected parsed error: %+v", err)
+	}
+}
+
+func TestParseAPIErrorUnstructuredBody(t *testing.T) {
+	body := []byte("plain text error")
+	err := parseAPIError(http.StatusInternalServerError, body)
+	if err.ErrorText != "plain text error" {
+		t.Errorf("expected raw body as ErrorText, got %q", err.ErrorText)
+	}
+}
+
+func TestIsAPIError(t *testing.T) {
+	apiErr := &APIError{Code: 404}
+	if !IsAPIError(apiErr) {
+		t.Error("expected IsAPIError(apiErr) to be true")
+	}
+	if !IsAPIError(apiErr, 404, 500) {
+		t.Error("expected IsAPIError to match code 404")
+	}
+	if IsAPIError(apiErr, 500) {
+		t.Error("expected IsAPIError to not match unrelated code")
+	}
+	if IsAPIError(errors.New("plain error")) {
+		t.Error("expected IsAPIError(non-APIError) to be false")
 	}
 }

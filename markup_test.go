@@ -31,6 +31,55 @@ func marshalReplyBtn(t *testing.T, btn ReplyButton) map[string]interface{} {
 	return m
 }
 
+func TestReplyMarkupRow(t *testing.T) {
+	rm := &ReplyMarkup{}
+	rm.Row(rm.URL("a", "https://a"), rm.URL("b", "https://b"))
+	rm.Row(rm.URL("c", "https://c"))
+
+	if len(rm.InlineKeyboard) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rm.InlineKeyboard))
+	}
+	if len(rm.InlineKeyboard[0]) != 2 || len(rm.InlineKeyboard[1]) != 1 {
+		t.Errorf("unexpected row sizes: %+v", rm.InlineKeyboard)
+	}
+}
+
+func TestReplyMarkupDataWithPayload(t *testing.T) {
+	rm := &ReplyMarkup{}
+
+	// Without a payload, Data is the button's own callback data.
+	btn := rm.Data("Text", "raw-data")
+	if btn.Payload != "raw-data" {
+		t.Errorf("expected payload=raw-data, got %q", btn.Payload)
+	}
+
+	// With a payload value, it's JSON-marshaled into Payload.
+	btn = rm.Data("Text", "raw-data", map[string]int{"n": 1})
+	if btn.Payload != `{"n":1}` {
+		t.Errorf("expected marshaled payload, got %q", btn.Payload)
+	}
+
+	// An unmarshalable payload falls back to the raw data string.
+	btn = rm.Data("Text", "raw-data", make(chan int))
+	if btn.Payload != "raw-data" {
+		t.Errorf("expected fallback to raw-data on marshal error, got %q", btn.Payload)
+	}
+}
+
+func TestReplyMarkupOpenAppContactID(t *testing.T) {
+	rm := &ReplyMarkup{}
+
+	btn := rm.OpenApp("Open", "app-1", "payload", 0)
+	if btn.ContactID != 0 {
+		t.Errorf("expected ContactID=0 when unset, got %d", btn.ContactID)
+	}
+
+	btn = rm.OpenApp("Open", "app-1", "payload", 42)
+	if btn.ContactID != 42 {
+		t.Errorf("expected ContactID=42, got %d", btn.ContactID)
+	}
+}
+
 // ReplyButton.MarshalJSON auto-sets "type" based on filled fields.
 func TestReplyButtonMarshalJSON(t *testing.T) {
 	kb := &ReplyKeyboard{}
