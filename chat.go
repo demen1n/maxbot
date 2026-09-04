@@ -3,6 +3,8 @@ package maxbot
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // GetChats returns group chats the bot participates in.
@@ -131,14 +133,13 @@ func (b *Bot) GetChatMembers(chatID, count int64, marker *int64) ([]ChatMember, 
 }
 
 // GetSpecificChatMembers retrieves info for a specific set of users in the chat.
+// Per spec, user_ids is a single comma-separated query parameter, not a repeated key.
 func (b *Bot) GetSpecificChatMembers(chatID int64, userIDs []int64) ([]ChatMember, error) {
-	path := fmt.Sprintf("/chats/%d/members?", chatID)
+	ids := make([]string, len(userIDs))
 	for i, id := range userIDs {
-		if i > 0 {
-			path += "&"
-		}
-		path += fmt.Sprintf("user_ids=%d", id)
+		ids[i] = strconv.FormatInt(id, 10)
 	}
+	path := fmt.Sprintf("/chats/%d/members?user_ids=%s", chatID, strings.Join(ids, ","))
 	data, err := b.Raw("GET", path, nil)
 	if err != nil {
 		return nil, err
@@ -153,19 +154,17 @@ func (b *Bot) GetSpecificChatMembers(chatID int64, userIDs []int64) ([]ChatMembe
 }
 
 // GetChatMember gets information about a specific chat member.
+// The MAX API has no dedicated /members/{userId} path; it is fetched via
+// the user_ids filter on GET /chats/{id}/members.
 func (b *Bot) GetChatMember(chatID int64, userID int64) (*ChatMember, error) {
-	url := fmt.Sprintf("/chats/%d/members/%d", chatID, userID)
-	data, err := b.Raw("GET", url, nil)
+	members, err := b.GetSpecificChatMembers(chatID, []int64{userID})
 	if err != nil {
 		return nil, err
 	}
-
-	var member ChatMember
-	if err := json.Unmarshal(data, &member); err != nil {
-		return nil, err
+	if len(members) == 0 {
+		return nil, fmt.Errorf("chat member %d not found in chat %d", userID, chatID)
 	}
-
-	return &member, nil
+	return &members[0], nil
 }
 
 // GetChatAdmins gets the list of chat administrators.
