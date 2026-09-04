@@ -25,17 +25,18 @@ const (
 	OnDocument = "\adocument"
 
 	// Update-type specific endpoints.
-	OnMessageEdited    = "\amessage_edited"
-	OnMessageRemoved   = "\amessage_removed"
-	OnBotStarted       = "\abot_started"
-	OnBotAdded         = "\abot_added"
-	OnBotRemoved       = "\abot_removed"
-	OnBotStopped       = "\abot_stopped"
-	OnUserAdded        = "\auser_added"
-	OnUserRemoved      = "\auser_removed"
-	OnChatTitleChanged = "\achat_title_changed"
-	OnDialogRemoved    = "\adialog_removed"
-	OnDialogCleared    = "\adialog_cleared"
+	OnMessageEdited      = "\amessage_edited"
+	OnMessageRemoved     = "\amessage_removed"
+	OnBotStarted         = "\abot_started"
+	OnBotAdded           = "\abot_added"
+	OnBotRemoved         = "\abot_removed"
+	OnBotStopped         = "\abot_stopped"
+	OnUserAdded          = "\auser_added"
+	OnUserRemoved        = "\auser_removed"
+	OnChatTitleChanged   = "\achat_title_changed"
+	OnDialogRemoved      = "\adialog_removed"
+	OnDialogCleared      = "\adialog_cleared"
+	OnMessageChatCreated = "\amessage_chat_created" // Chat button completed: new chat was created
 )
 
 // Bot represents a MAX bot instance.
@@ -241,6 +242,8 @@ func (b *Bot) match(u Update) HandlerFunc {
 		endpointKey = OnDialogRemoved
 	case UpdateDialogCleared:
 		endpointKey = OnDialogCleared
+	case UpdateMessageChatCreated:
+		endpointKey = OnMessageChatCreated
 	}
 
 	if endpointKey != "" {

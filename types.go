@@ -191,19 +191,20 @@ func (m *Message) Mid() string {
 
 // Update type constants.
 const (
-	UpdateMessageCreated   = "message_created"
-	UpdateMessageEdited    = "message_edited"
-	UpdateMessageRemoved   = "message_removed"
-	UpdateMessageCallback  = "message_callback"
-	UpdateBotAdded         = "bot_added"
-	UpdateBotRemoved       = "bot_removed"
-	UpdateBotStarted       = "bot_started"
-	UpdateBotStopped       = "bot_stopped"
-	UpdateUserAdded        = "user_added"
-	UpdateUserRemoved      = "user_removed"
-	UpdateChatTitleChanged = "chat_title_changed"
-	UpdateDialogRemoved    = "dialog_removed"
-	UpdateDialogCleared    = "dialog_cleared"
+	UpdateMessageCreated     = "message_created"
+	UpdateMessageEdited      = "message_edited"
+	UpdateMessageRemoved     = "message_removed"
+	UpdateMessageCallback    = "message_callback"
+	UpdateBotAdded           = "bot_added"
+	UpdateBotRemoved         = "bot_removed"
+	UpdateBotStarted         = "bot_started"
+	UpdateBotStopped         = "bot_stopped"
+	UpdateUserAdded          = "user_added"
+	UpdateUserRemoved        = "user_removed"
+	UpdateChatTitleChanged   = "chat_title_changed"
+	UpdateDialogRemoved      = "dialog_removed"
+	UpdateDialogCleared      = "dialog_cleared"
+	UpdateMessageChatCreated = "message_chat_created"
 )
 
 // Update represents an incoming update from MAX API.
@@ -216,10 +217,10 @@ type Update struct {
 
 	// Fields for bot_started, bot_added, bot_removed, bot_stopped,
 	// user_added, user_removed, chat_title_changed.
-	ChatID    int64  `json:"chat_id,omitempty"`
-	User      *User  `json:"user,omitempty"`
-	Payload   string `json:"payload,omitempty"` // bot_started deeplink
-	Title     string `json:"title,omitempty"`   // chat_title_changed
+	ChatID  int64  `json:"chat_id,omitempty"`
+	User    *User  `json:"user,omitempty"`
+	Payload string `json:"payload,omitempty"` // bot_started deeplink
+	Title   string `json:"title,omitempty"`   // chat_title_changed
 
 	// Fields for message_removed.
 	MessageID string `json:"message_id,omitempty"`
@@ -230,6 +231,12 @@ type Update struct {
 
 	// Fields for user_added / user_removed.
 	IsChannel bool `json:"is_channel,omitempty"`
+
+	// Fields for message_chat_created (fired when the first user taps a
+	// Chat button). MessageID (above) carries the id of the message the
+	// button was on.
+	Chat         *Chat  `json:"chat,omitempty"`
+	StartPayload string `json:"start_payload,omitempty"`
 }
 
 // CallbackQuery represents a callback button press.
@@ -273,11 +280,11 @@ const (
 // The MAX API returns user fields flat alongside member-specific fields;
 // UnmarshalJSON populates the nested User from those flat fields.
 type ChatMember struct {
-	User           *User               `json:"-"`
-	IsOwner        bool                `json:"is_owner"`
-	IsAdmin        bool                `json:"is_admin"`
-	JoinTime       int64               `json:"join_time"`
-	LastAccessTime int64               `json:"last_access_time"`
+	User           *User                 `json:"-"`
+	IsOwner        bool                  `json:"is_owner"`
+	IsAdmin        bool                  `json:"is_admin"`
+	JoinTime       int64                 `json:"join_time"`
+	LastAccessTime int64                 `json:"last_access_time"`
 	Permissions    []ChatAdminPermission `json:"permissions,omitempty"`
 }
 

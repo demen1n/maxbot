@@ -63,6 +63,10 @@ func (c *nativeContext) Chat() *Chat {
 	if cb := c.update.CallbackQuery; cb != nil && cb.Message != nil {
 		return cb.Message.Chat()
 	}
+	// message_chat_created carries the full created Chat object.
+	if c.update.Chat != nil {
+		return c.update.Chat
+	}
 	// Non-message updates that carry chat_id.
 	if c.update.ChatID != 0 {
 		return &Chat{ID: c.update.ChatID}
