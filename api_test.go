@@ -219,3 +219,52 @@ func TestEditMessageByMidFailure(t *testing.T) {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
+
+// SetCommands must use the dedicated PATCH /me/commands endpoint, not PATCH /me.
+func TestSetCommandsUsesDedicatedEndpoint(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"commands": gotBody["commands"]})
+	}))
+
+	err := b.SetCommands([]BotCommand{{Name: "start", Description: "Start the bot"}})
+	if err != nil {
+		t.Fatalf("SetCommands error: %v", err)
+	}
+	if gotMethod != http.MethodPatch {
+		t.Errorf("expected PATCH, got %s", gotMethod)
+	}
+	if gotPath != "/me/commands" {
+		t.Errorf("expected path /me/commands, got %q", gotPath)
+	}
+	cmds, ok := gotBody["commands"].([]interface{})
+	if !ok || len(cmds) != 1 {
+		t.Fatalf("expected 1 command in body, got %+v", gotBody["commands"])
+	}
+}
+
+// DeleteCommands must send an empty (not nil/omitted) commands array.
+func TestDeleteCommandsSendsEmptyArray(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"commands": []interface{}{}})
+	}))
+
+	if err := b.DeleteCommands(); err != nil {
+		t.Fatalf("DeleteCommands error: %v", err)
+	}
+	cmds, ok := gotBody["commands"].([]interface{})
+	if !ok {
+		t.Fatalf("expected commands field to be an array, got %+v", gotBody["commands"])
+	}
+	if len(cmds) != 0 {
+		t.Errorf("expected empty commands array, got %+v", cmds)
+	}
+}

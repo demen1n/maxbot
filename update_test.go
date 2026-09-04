@@ -112,3 +112,34 @@ func TestMessageEditedRoutesToOnMessageEdited(t *testing.T) {
 	}
 	_ = editedCalled
 }
+
+// message_chat_created (fired when a Chat button creates a chat) routes to
+// OnMessageChatCreated, and Context.Chat() resolves the created chat.
+func TestMessageChatCreatedRouting(t *testing.T) {
+	b := makeBot(t)
+	called := false
+	b.Handle(OnMessageChatCreated, func(Context) error { called = true; return nil })
+
+	u := Update{
+		UpdateType:   UpdateMessageChatCreated,
+		MessageID:    "mid.1",
+		StartPayload: "ref-42",
+		Chat:         &Chat{ID: 777, Title: "New chat"},
+	}
+	h := b.match(u)
+	if h == nil {
+		t.Fatal("expected handler for message_chat_created")
+	}
+	if err := h(&nativeContext{b: b, update: u}); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if !called {
+		t.Error("expected handler to be invoked")
+	}
+
+	c := &nativeContext{b: b, update: u}
+	chat := c.Chat()
+	if chat == nil || chat.ID != 777 {
+		t.Errorf("expected chat ID=777, got %+v", chat)
+	}
+}

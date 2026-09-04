@@ -53,8 +53,9 @@ Poller (LongPoller or Webhook)
 - **`Update` / `Message`** (`types.go`) — domain models; `Message` has custom JSON unmarshaling to auto-populate `ReplyTo` from `body.link`.
 - **`CallbackQuery`** (`types.go`) — includes a `Message` field with the originating message, used for chat resolution in callback handlers.
 - **`Poller`** (`poller.go`) — interface with two implementations: `LongPoller` (marker-based) and `Webhook` (HTTP server with optional secret verification; handler is non-blocking via buffered channel + goroutine fallback).
-- **`Sendable`** / **`Editable`** / **`Recipient`** — interfaces for flexible argument passing to `Send()` / `Edit()`.
+- **`Sendable`** / **`Editable`** / **`Recipient`** — interfaces for flexible argument passing to `Send()` / `Edit()`. Implementations: `Photo`, `Video`, `Audio`, `Document`, `Sticker`, `Contact`, `Location`, `Share` (`sendable.go`).
 - **`ReplyMarkup`** / **`InlineButton`** (`markup.go`) — inline keyboard builder; `Data()` creates callback buttons, `URL()` creates link buttons.
+- **`ReplyKeyboard`** / **`ReplyButton`** (`markup.go`) — reply keyboard builder (buttons shown next to the input field, not under the message); distinct button set (`message`/`user_contact`/`user_geo_location`) from inline buttons. Passed to `Send()` as an option, same as `*ReplyMarkup`.
 
 ### Handler registration
 
@@ -85,9 +86,15 @@ Notable: `Throttle`, `RateLimit`, and `Metrics` hold in-memory state that is los
 
 ### API client
 
-`api.go` communicates with `https://platform-api.max.ru`. The token is stored as-is and passed directly in the `Authorization` header (the MAX API does not use a `Bearer` prefix). `Raw()` is the generic request method. File uploads go through a two-step `GetUploadURL()` → `UploadFile()` flow.
+`api.go` communicates with `https://platform-api2.max.ru` (the API migrated from `platform-api.max.ru`; MAX recommends the new host for bots and mini-apps). The token is stored as-is and passed directly in the `Authorization` header (the MAX API does not use a `Bearer` prefix). `Raw()` is the generic request method. File uploads go through a two-step `GetUploadURL()` → `UploadFile()` flow.
 
 Edit/delete operations use `?message_id=` query params (not path segments). `*Message` always goes through `editMessageByMid` / `deleteMessage` using the string `mid`; `StoredMessage` uses its integer ID.
+
+Bot commands go through the dedicated `PATCH /me/commands` endpoint (`SetCommands`/`DeleteCommands` in `api.go`), separate from `PatchBot`'s generic `PATCH /me` (name/username/description only).
+
+`GetChats` (`chat.go`) is deprecated: MAX removed `GET /chats` in June 2026 with no server-side replacement. Track `chat_id` from incoming updates instead.
+
+`comments.go` implements the Comments API (`/messages/{id}/comments[/{commentId}]`) for channel posts — a separate resource from regular messages, requiring the bot to be a channel admin.
 
 ### The `old/` directory
 

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DefaultAPIURL  = "https://platform-api.max.ru"
+	DefaultAPIURL  = "https://platform-api2.max.ru"
 	DefaultTimeout = 10 * time.Second
 	APIVersion     = "1.2.5"
 )
@@ -25,17 +25,18 @@ const (
 	OnDocument = "\adocument"
 
 	// Update-type specific endpoints.
-	OnMessageEdited    = "\amessage_edited"
-	OnMessageRemoved   = "\amessage_removed"
-	OnBotStarted       = "\abot_started"
-	OnBotAdded         = "\abot_added"
-	OnBotRemoved       = "\abot_removed"
-	OnBotStopped       = "\abot_stopped"
-	OnUserAdded        = "\auser_added"
-	OnUserRemoved      = "\auser_removed"
-	OnChatTitleChanged = "\achat_title_changed"
-	OnDialogRemoved    = "\adialog_removed"
-	OnDialogCleared    = "\adialog_cleared"
+	OnMessageEdited      = "\amessage_edited"
+	OnMessageRemoved     = "\amessage_removed"
+	OnBotStarted         = "\abot_started"
+	OnBotAdded           = "\abot_added"
+	OnBotRemoved         = "\abot_removed"
+	OnBotStopped         = "\abot_stopped"
+	OnUserAdded          = "\auser_added"
+	OnUserRemoved        = "\auser_removed"
+	OnChatTitleChanged   = "\achat_title_changed"
+	OnDialogRemoved      = "\adialog_removed"
+	OnDialogCleared      = "\adialog_cleared"
+	OnMessageChatCreated = "\amessage_chat_created" // Chat button completed: new chat was created
 )
 
 // Bot represents a MAX bot instance.
@@ -241,6 +242,8 @@ func (b *Bot) match(u Update) HandlerFunc {
 		endpointKey = OnDialogRemoved
 	case UpdateDialogCleared:
 		endpointKey = OnDialogCleared
+	case UpdateMessageChatCreated:
+		endpointKey = OnMessageChatCreated
 	}
 
 	if endpointKey != "" {
@@ -281,7 +284,7 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 	case string:
 		msg.Text = v
 	case Sendable:
-		return v.Send(b, to, parseSendOptions(opts))
+		return v.Send(b, to, buildSendOptions(opts))
 	default:
 		return nil, fmt.Errorf("unsupported sendable type: %T", what)
 	}
@@ -290,7 +293,7 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 		switch o := opt.(type) {
 		case *SendOptions:
 			msg.Format = o.Format
-			msg.Attachments = o.Attachments
+			msg.Attachments = append(msg.Attachments, o.Attachments...)
 			if o.ReplyToMid != "" {
 				msg.Link = &linkedRef{Type: "reply", Mid: o.ReplyToMid}
 			}
@@ -301,6 +304,20 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 					Payload: map[string]interface{}{
 						"buttons": o.InlineKeyboard,
 					},
+				})
+			}
+		case *ReplyKeyboard:
+			if len(o.Buttons) > 0 {
+				payload := map[string]interface{}{"buttons": o.Buttons}
+				if o.Direct {
+					payload["direct"] = true
+				}
+				if o.DirectUserID != 0 {
+					payload["direct_user_id"] = o.DirectUserID
+				}
+				msg.Attachments = append(msg.Attachments, Attachment{
+					Type:    "reply_keyboard",
+					Payload: payload,
 				})
 			}
 		}

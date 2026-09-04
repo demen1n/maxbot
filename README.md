@@ -152,6 +152,23 @@ menu.Row(menu.Chat("Создать группу", "Моя группа", "Опи
 menu.Row(menu.MessageBtn("Отправить"))
 ```
 
+### Reply-клавиатуры
+
+В отличие от inline-клавиатуры (кнопки под сообщением), reply-клавиатура показывается рядом с полем ввода.
+
+```go
+kb := &maxbot.ReplyKeyboard{}
+kb.Row(kb.Message("Да", "yes"), kb.Message("Нет", "no"))
+kb.Row(kb.Contact("Поделиться номером"))
+kb.Row(kb.Geolocation("Поделиться локацией", false))
+
+b.Send(chat, "Выберите вариант", kb)
+
+// Ограничить клавиатуру одним участником чата
+kb.Direct = true
+kb.DirectUserID = userID
+```
+
 ### Отправка файлов
 
 Файлы сначала загружаются на серверы MAX, затем отправляются сообщением.
@@ -175,6 +192,15 @@ b.Send(chat, &maxbot.Document{UploadedInfo: *info})
 
 // UploadFile — устаревший враппер, оставлен для совместимости
 token, err := b.UploadFile("image", "photo.jpg", fileData)
+```
+
+Стикер, контакт, геолокация и превью ссылки отправляются без загрузки — это не файлы:
+
+```go
+b.Send(chat, &maxbot.Sticker{Code: "smile"})
+b.Send(chat, &maxbot.Contact{Name: "Alice", VCFPhone: "+71234567890"})
+b.Send(chat, &maxbot.Location{Latitude: 55.75, Longitude: 37.61})
+b.Send(chat, &maxbot.Share{URL: "https://example.com"})
 ```
 
 ### Редактирование сообщений
@@ -270,6 +296,11 @@ b.Handle(maxbot.OnMessageEdited, func(c maxbot.Context) error {
 b.Handle(maxbot.OnMessageRemoved, func(c maxbot.Context) error {
     return nil
 })
+
+// Чат создан по кнопке Chat (menu.Chat(...))
+b.Handle(maxbot.OnMessageChatCreated, func(c maxbot.Context) error {
+    return c.Send("Чат создан: " + c.Chat().Title)
+})
 ```
 
 ### Webhook
@@ -301,7 +332,10 @@ b.DeleteWebhook("https://example.com/webhook")
 chat, err := b.GetChat(chatID)
 chat, err := b.GetChatByLink("mygroup")
 
-// Список чатов с пагинацией
+// Список чатов с пагинацией.
+// Deprecated: с июня 2026 GET /chats больше не поддерживается MAX API.
+// Замены на стороне API нет — собирайте chat_id сами из входящих апдейтов
+// (bot_added, bot_started, message_created и т.д.) и храните их в своей БД.
 chats, nextMarker, err := b.GetChats(50, nil)
 
 // Участники с пагинацией
@@ -326,6 +360,26 @@ b.UnpinMessage(chatID)
 
 // Действия в чате (typing, отправка фото и т.д.)
 b.SendChatAction(chatID, maxbot.ActionTyping)
+```
+
+### Комментарии (каналы)
+
+Для работы с комментариями бот должен быть администратором канала с нужными правами
+(`read_all_messages` для чтения, `write` для публикации, `delete` для удаления).
+
+```go
+// Получить комментарии к посту
+comments, err := b.GetComments(postMid, nil, 0, 0, 50)
+
+// Получить конкретный комментарий
+comment, err := b.GetComment(postMid, commentID)
+
+// Опубликовать комментарий
+comment, err := b.PostComment(postMid, "Текст комментария", "")
+
+// Отредактировать / удалить
+b.EditComment(postMid, commentID, "Новый текст")
+b.DeleteComment(postMid, commentID)
 ```
 
 ### Context методы
