@@ -23,6 +23,9 @@ go fmt ./...
 # Vet code
 go vet ./...
 
+# Lint (same checks as CI; config in .golangci.yml)
+golangci-lint run ./...
+
 # Tidy dependencies
 go mod tidy
 ```

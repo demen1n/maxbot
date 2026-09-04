@@ -22,33 +22,33 @@ func TestMatchNonMessageUpdateTypes(t *testing.T) {
 		wantRouted bool
 	}{
 		{
-			name:     "bot_started",
-			endpoint: OnBotStarted,
-			update:   Update{UpdateType: UpdateBotStarted, ChatID: 1, User: &User{ID: 2}},
+			name:       "bot_started",
+			endpoint:   OnBotStarted,
+			update:     Update{UpdateType: UpdateBotStarted, ChatID: 1, User: &User{ID: 2}},
 			wantRouted: true,
 		},
 		{
-			name:     "bot_added",
-			endpoint: OnBotAdded,
-			update:   Update{UpdateType: UpdateBotAdded, ChatID: 1, User: &User{ID: 3}},
+			name:       "bot_added",
+			endpoint:   OnBotAdded,
+			update:     Update{UpdateType: UpdateBotAdded, ChatID: 1, User: &User{ID: 3}},
 			wantRouted: true,
 		},
 		{
-			name:     "user_added",
-			endpoint: OnUserAdded,
-			update:   Update{UpdateType: UpdateUserAdded, ChatID: 1, User: &User{ID: 4}},
+			name:       "user_added",
+			endpoint:   OnUserAdded,
+			update:     Update{UpdateType: UpdateUserAdded, ChatID: 1, User: &User{ID: 4}},
 			wantRouted: true,
 		},
 		{
-			name:     "chat_title_changed",
-			endpoint: OnChatTitleChanged,
-			update:   Update{UpdateType: UpdateChatTitleChanged, ChatID: 1, Title: "New Title"},
+			name:       "chat_title_changed",
+			endpoint:   OnChatTitleChanged,
+			update:     Update{UpdateType: UpdateChatTitleChanged, ChatID: 1, Title: "New Title"},
 			wantRouted: true,
 		},
 		{
-			name:     "unregistered type returns nil",
-			endpoint: OnBotStarted,
-			update:   Update{UpdateType: UpdateBotStopped},
+			name:       "unregistered type returns nil",
+			endpoint:   OnBotStarted,
+			update:     Update{UpdateType: UpdateBotStopped},
 			wantRouted: false,
 		},
 	}

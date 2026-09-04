@@ -130,4 +130,3 @@ func TestGetChatMemberNotFound(t *testing.T) {
 		t.Fatal("expected error for missing member, got nil")
 	}
 }
-

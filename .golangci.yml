@@ -1,0 +1,22 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - bodyclose
+    - misspell
+    - unconvert
+  exclusions:
+    rules:
+      # Checking every mock encode/decode error in table-driven HTTP test
+      # handlers is noise, not signal -- exclude test files from errcheck.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

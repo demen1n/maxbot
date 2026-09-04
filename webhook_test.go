@@ -73,6 +73,7 @@ func TestWebhookSecretHeader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 with correct secret, got %d", resp.StatusCode)
 	}
@@ -85,8 +86,8 @@ func TestWebhookSecretHeader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401 with wrong secret header, got %d", resp2.StatusCode)
 	}
 }
-

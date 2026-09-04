@@ -70,7 +70,7 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 		}
 
 		respData, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 		}
 
 		respData, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return err
 		}
@@ -219,7 +219,7 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) 
 	if err != nil {
 		return nil, nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -351,7 +351,7 @@ func (b *Bot) UploadPhoto(fileName string, data []byte) (*PhotoTokens, error) {
 	if err != nil {
 		return nil, &NetworkError{Op: "UploadPhoto", Err: err}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
@@ -390,7 +390,7 @@ func (b *Bot) UploadMedia(fileType, fileName string, data []byte) (*UploadedInfo
 	if err != nil {
 		return nil, &NetworkError{Op: "UploadMedia", Err: err}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
@@ -533,7 +533,7 @@ func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

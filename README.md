@@ -1,7 +1,8 @@
 # Maxbot
 
+[![CI](https://github.com/demen1n/maxbot/actions/workflows/ci.yml/badge.svg)](https://github.com/demen1n/maxbot/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/demen1n/maxbot.svg)](https://pkg.go.dev/github.com/demen1n/maxbot)
-[![Go Report Card](https://goreportcard.com/badge/github.com/demen1n/maxbot)](https://goreportcard.com/report/github.com/demen1n/maxbot)
+[![codecov](https://codecov.io/gh/demen1n/maxbot/branch/master/graph/badge.svg)](https://codecov.io/gh/demen1n/maxbot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Библиотека, вдохновлённая библиотекой [telebot](https://github.com/tucnak/telebot). Библиотека авторов Max [max-bot-api-client-go](https://github.com/max-messenger/max-bot-api-client-go) имеет фатальный недостаток — её писал не я.

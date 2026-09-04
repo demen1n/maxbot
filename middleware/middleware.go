@@ -38,7 +38,7 @@ func AutoRespond() maxbot.MiddlewareFunc {
 	return func(next maxbot.HandlerFunc) maxbot.HandlerFunc {
 		return func(c maxbot.Context) error {
 			if c.Callback() != nil {
-				defer c.Respond()
+				defer func() { _ = c.Respond() }()
 			}
 			return next(c)
 		}
@@ -58,7 +58,7 @@ func Recover(onPanic ...func(error)) maxbot.MiddlewareFunc {
 						onPanic[0](err)
 					}
 
-					c.Send("❌ Произошла внутренняя ошибка")
+					_ = c.Send("❌ Произошла внутренняя ошибка")
 				}
 			}()
 
@@ -253,7 +253,7 @@ func FilterWords(words []string, caseSensitive bool) maxbot.MiddlewareFunc {
 
 			for _, word := range words {
 				if strings.Contains(text, word) {
-					c.Delete()
+					_ = c.Delete()
 					return c.Send("⚠️ Ваше сообщение содержит запрещенные слова")
 				}
 			}
