@@ -315,8 +315,8 @@ func TestPromoteChatMemberDefaultsAllPermissions(t *testing.T) {
 	if len(gotBody.Admins) != 1 || gotBody.Admins[0].UserID != 2 {
 		t.Fatalf("unexpected admins body: %+v", gotBody.Admins)
 	}
-	if len(gotBody.Admins[0].Permissions) != 6 {
-		t.Errorf("expected all 6 default permissions, got %v", gotBody.Admins[0].Permissions)
+	if len(gotBody.Admins[0].Permissions) != 11 {
+		t.Errorf("expected all 11 default permissions, got %v", gotBody.Admins[0].Permissions)
 	}
 }
 

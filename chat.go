@@ -203,7 +203,12 @@ func (b *Bot) PromoteChatMember(chatID, userID int64, perms ...ChatAdminPermissi
 			PermAddAdmins,
 			PermChangeChatInfo,
 			PermPinMessage,
+			PermEditLink,
 			PermWrite,
+			PermEdit,
+			PermDelete,
+			PermCanCall,
+			PermViewStats,
 		}
 	}
 	endpoint := fmt.Sprintf("/chats/%d/members/admins", chatID)
