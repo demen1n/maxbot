@@ -18,6 +18,90 @@ func marshalBtn(t *testing.T, btn InlineButton) map[string]interface{} {
 	return m
 }
 
+func marshalReplyBtn(t *testing.T, btn ReplyButton) map[string]interface{} {
+	t.Helper()
+	data, err := json.Marshal(&btn)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	return m
+}
+
+// ReplyButton.MarshalJSON auto-sets "type" based on filled fields.
+func TestReplyButtonMarshalJSON(t *testing.T) {
+	kb := &ReplyKeyboard{}
+
+	tests := []struct {
+		name     string
+		btn      ReplyButton
+		wantType string
+		check    func(t *testing.T, m map[string]interface{})
+	}{
+		{
+			name:     "message",
+			btn:      kb.Message("Hi", "hi-payload"),
+			wantType: "message",
+			check: func(t *testing.T, m map[string]interface{}) {
+				if m["payload"] != "hi-payload" {
+					t.Errorf("expected payload=hi-payload, got %v", m["payload"])
+				}
+			},
+		},
+		{
+			name:     "user_contact",
+			btn:      kb.Contact("Share phone"),
+			wantType: "user_contact",
+		},
+		{
+			name:     "user_geo_location",
+			btn:      kb.Geolocation("Share location", true),
+			wantType: "user_geo_location",
+			check: func(t *testing.T, m map[string]interface{}) {
+				if m["quick"] != true {
+					t.Errorf("expected quick=true, got %v", m["quick"])
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := marshalReplyBtn(t, tc.btn)
+			if m["type"] != tc.wantType {
+				t.Errorf("expected type=%q, got %q", tc.wantType, m["type"])
+			}
+			if tc.check != nil {
+				tc.check(t, m)
+			}
+		})
+	}
+}
+
+// ReplyKeyboard marshals as an attachment payload with buttons/direct/direct_user_id.
+func TestReplyKeyboardAttachmentPayload(t *testing.T) {
+	kb := &ReplyKeyboard{Direct: true, DirectUserID: 42}
+	kb.Row(kb.Message("Hi", "hi"), kb.Contact("Share phone"))
+
+	data, err := json.Marshal(kb.Buttons)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var rows [][]map[string]interface{}
+	if err := json.Unmarshal(data, &rows); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if len(rows) != 1 || len(rows[0]) != 2 {
+		t.Fatalf("expected 1 row of 2 buttons, got %+v", rows)
+	}
+	if rows[0][0]["type"] != "message" || rows[0][1]["type"] != "user_contact" {
+		t.Errorf("unexpected button types: %+v", rows[0])
+	}
+}
+
 // TASK-14: clipboard, chat, message button types.
 func TestNewButtonTypesMarshal(t *testing.T) {
 	rm := &ReplyMarkup{}
