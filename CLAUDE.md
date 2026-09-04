@@ -99,6 +99,13 @@ Bot commands go through the dedicated `PATCH /me/commands` endpoint (`SetCommand
 
 `comments.go` implements the Comments API (`/messages/{id}/comments[/{commentId}]`) for channel posts — a separate resource from regular messages, requiring the bot to be a channel admin.
 
+### The `spec/` directory
+
+`spec/max-bot-api-0.0.33.json` is the authoritative MAX Bot API OpenAPI spec, extracted from the
+docs bundle at dev.max.ru (MAX publishes no spec file; `spec/extract_spec.py` re-extracts it, and
+`spec/README.md` explains why the `schema.yaml` in the official Go client is not the source of
+truth). Check the API against this file, not against the official client's code.
+
 ### The `old/` directory
 
 Contains pre-refactor code tagged `//go:build ignore`. It is excluded from compilation and ignored by git — do not edit or rely on it.
