@@ -15,9 +15,13 @@ type CallbackResponse struct {
 }
 
 // Attachment represents a message attachment (keyboard, file, etc).
+// Latitude/Longitude are only used by the "location" attachment type,
+// which per spec carries them as top-level fields rather than in Payload.
 type Attachment struct {
-	Type    string                 `json:"type"`
-	Payload map[string]interface{} `json:"payload,omitempty"`
+	Type      string                 `json:"type"`
+	Payload   map[string]interface{} `json:"payload,omitempty"`
+	Latitude  *float64               `json:"latitude,omitempty"`
+	Longitude *float64               `json:"longitude,omitempty"`
 }
 
 // SendMessage represents an outgoing message request.
