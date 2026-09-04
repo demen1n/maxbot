@@ -273,11 +273,12 @@ func (b *Bot) Me() (*User, error) {
 }
 
 // BotPatch contains fields to update on the bot via PATCH /me.
+// Commands are not part of this: MAX exposes a dedicated PATCH /me/commands
+// endpoint for them (see SetCommands).
 type BotPatch struct {
-	Name        string       `json:"name,omitempty"`
-	Username    string       `json:"username,omitempty"`
-	Description string       `json:"description,omitempty"`
-	Commands    []BotCommand `json:"commands,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Username    string `json:"username,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // PatchBot updates bot properties via PATCH /me.
@@ -293,23 +294,17 @@ func (b *Bot) PatchBot(patch BotPatch) (*User, error) {
 	return &user, nil
 }
 
-// SetCommands sets the bot's command list.
+// SetCommands sets the bot's command list via the dedicated
+// PATCH /me/commands endpoint. Pass an empty slice to remove all commands.
 func (b *Bot) SetCommands(commands []BotCommand) error {
-	patch := map[string]interface{}{
+	if commands == nil {
+		commands = []BotCommand{}
+	}
+	payload := map[string]interface{}{
 		"commands": commands,
 	}
-
-	data, err := b.Raw("PATCH", "/me", patch)
-	if err != nil {
-		return err
-	}
-
-	var user User
-	if err := json.Unmarshal(data, &user); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := b.Raw("PATCH", "/me/commands", payload)
+	return err
 }
 
 // DeleteCommands removes all bot commands.
