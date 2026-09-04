@@ -454,6 +454,10 @@ func buildMultipart(fileName string, data []byte) (*bytes.Buffer, string, error)
 
 // GetMessages retrieves messages in a chat.
 // from/to are optional timestamp boundaries (pass 0 to omit); count limits results.
+// The returned marker may always be nil: MAX's own MessageList response
+// schema declares only "messages", even though the endpoint's own
+// description mentions marker-based pagination -- this passes it through
+// if the server does send one, without assuming it will.
 func (b *Bot) GetMessages(chatID int64, count int, from, to int64) ([]Message, *int64, error) {
 	path := fmt.Sprintf("/messages?chat_id=%d", chatID)
 	if count > 0 {
