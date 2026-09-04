@@ -80,6 +80,23 @@ func TestReplyMarkupOpenAppContactID(t *testing.T) {
 	}
 }
 
+// ChatButton.uuid is a JSON integer per the MAX API schema, not a string --
+// reused across message edits so the button doesn't spawn a new chat.
+func TestChatButtonUUIDMarshalsAsInteger(t *testing.T) {
+	rm := &ReplyMarkup{}
+	btn := rm.Chat("New Chat", "My Group", "desc", "start")
+	btn.ChatUUID = 123456789
+
+	m := marshalBtn(t, btn)
+	uuid, ok := m["uuid"].(float64)
+	if !ok {
+		t.Fatalf("expected uuid to decode as a JSON number, got %T (%v)", m["uuid"], m["uuid"])
+	}
+	if uuid != 123456789 {
+		t.Errorf("expected uuid=123456789, got %v", uuid)
+	}
+}
+
 // ReplyButton.MarshalJSON auto-sets "type" based on filled fields.
 func TestReplyButtonMarshalJSON(t *testing.T) {
 	kb := &ReplyKeyboard{}

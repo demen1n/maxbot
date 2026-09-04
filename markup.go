@@ -42,7 +42,10 @@ type InlineButton struct {
 	ChatTitle        string `json:"chat_title,omitempty"`
 	ChatDescription  string `json:"chat_description,omitempty"`
 	ChatStartPayload string `json:"start_payload,omitempty"`
-	ChatUUID         string `json:"uuid,omitempty"`
+	// ChatUUID is the server-generated button identifier; reuse the value
+	// from a previous response when editing the message, or a new chat is
+	// created on the next click.
+	ChatUUID int64 `json:"uuid,omitempty"`
 
 	// Internal routing hint; not serialised.
 	Data string `json:"-"`
