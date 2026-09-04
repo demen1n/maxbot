@@ -22,7 +22,10 @@ type InlineButton struct {
 	Text   string `json:"text"`
 	Intent Intent `json:"intent,omitempty"`
 
-	// Callback button
+	// Payload carries the button's data: callback data for a Callback
+	// button, the copied text for a Clipboard button, or the launch
+	// payload for an OpenApp button -- MAX serialises all three under the
+	// same "payload" field.
 	Payload string `json:"payload,omitempty"`
 
 	// Link button
@@ -35,9 +38,6 @@ type InlineButton struct {
 	// Geolocation button (type: "request_geo_location")
 	Quick bool `json:"quick,omitempty"`
 
-	// Clipboard button (type: "clipboard")
-	ClipboardPayload string `json:"clipboard_payload,omitempty"`
-
 	// Chat button (type: "chat")
 	ChatTitle        string `json:"chat_title,omitempty"`
 	ChatDescription  string `json:"chat_description,omitempty"`
@@ -48,9 +48,10 @@ type InlineButton struct {
 	Data string `json:"-"`
 
 	// Internal type selectors; not serialised.
-	Contact  bool `json:"-"`
-	Location bool `json:"-"`
-	Message  bool `json:"-"` // forces type:"message"
+	Contact   bool `json:"-"`
+	Location  bool `json:"-"`
+	Message   bool `json:"-"` // forces type:"message"
+	Clipboard bool `json:"-"` // forces type:"clipboard"; value carried in Payload
 }
 
 // MarshalJSON serialises the button with an auto-computed "type" field.
@@ -66,7 +67,7 @@ func (b *InlineButton) MarshalJSON() ([]byte, error) {
 		btnType = "request_contact"
 	case b.Location:
 		btnType = "request_geo_location"
-	case b.ClipboardPayload != "":
+	case b.Clipboard:
 		btnType = "clipboard"
 	case b.ChatTitle != "":
 		btnType = "chat"
@@ -145,8 +146,9 @@ func (r *ReplyMarkup) OpenApp(text, webApp, payload string, contactID int64) Inl
 // Clipboard creates a button that copies text to the clipboard when pressed.
 func (r *ReplyMarkup) Clipboard(text, payload string) InlineButton {
 	return InlineButton{
-		Text:             text,
-		ClipboardPayload: payload,
+		Text:      text,
+		Payload:   payload,
+		Clipboard: true,
 	}
 }
 

@@ -166,8 +166,11 @@ func TestNewButtonTypesMarshal(t *testing.T) {
 			btn:      rm.Clipboard("Copy", "copy-text"),
 			wantType: "clipboard",
 			check: func(t *testing.T, m map[string]interface{}) {
-				if m["clipboard_payload"] != "copy-text" {
-					t.Errorf("expected clipboard_payload=copy-text, got %v", m["clipboard_payload"])
+				if m["payload"] != "copy-text" {
+					t.Errorf("expected payload=copy-text, got %v", m["payload"])
+				}
+				if _, ok := m["clipboard_payload"]; ok {
+					t.Error("clipboard_payload is not a real MAX API field; must not be serialized")
 				}
 			},
 		},
