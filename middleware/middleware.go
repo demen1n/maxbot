@@ -151,14 +151,14 @@ func RestrictChatType(types ...string) maxbot.MiddlewareFunc {
 	}
 }
 
-// OnlyPrivate allows handler only in private chats.
+// OnlyPrivate allows handler only in one-on-one dialogs.
 func OnlyPrivate() maxbot.MiddlewareFunc {
-	return RestrictChatType("private", "dialog")
+	return RestrictChatType("dialog")
 }
 
-// OnlyGroups allows handler only in group chats.
+// OnlyGroups allows handler only in group chats and channels.
 func OnlyGroups() maxbot.MiddlewareFunc {
-	return RestrictChatType("group", "channel")
+	return RestrictChatType("chat", "channel")
 }
 
 // CommandArgs ensures command has minimum number of arguments.
