@@ -34,6 +34,30 @@ func TestGetCommentsBuildsQuery(t *testing.T) {
 	}
 }
 
+// CommentMessage is an alias for Message, so it must pick up
+// Message.UnmarshalJSON's ReplyTo auto-population, not just Sender/Body.
+func TestGetCommentPopulatesReplyTo(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"timestamp": 1,
+			"body":      map[string]interface{}{"mid": "mid.c2", "text": "reply"},
+			"link": map[string]interface{}{
+				"type":    "reply",
+				"message": map[string]interface{}{"mid": "mid.c1", "text": "original"},
+			},
+		})
+	}))
+
+	comment, err := b.GetComment("mid.post1", "mid.c2")
+	if err != nil {
+		t.Fatalf("GetComment error: %v", err)
+	}
+	if comment.ReplyTo == nil || comment.ReplyTo.Text() != "original" {
+		t.Fatalf("expected ReplyTo populated from link, got %+v", comment.ReplyTo)
+	}
+}
+
 func TestGetCommentSingle(t *testing.T) {
 	var gotPath string
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

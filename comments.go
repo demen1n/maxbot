@@ -9,22 +9,10 @@ import (
 )
 
 // CommentMessage represents a comment posted on a channel post.
-// Comments never carry attachments and never forward another message.
-type CommentMessage struct {
-	Sender    *User          `json:"sender,omitempty"`
-	Recipient *RecipientInfo `json:"recipient,omitempty"`
-	Timestamp int64          `json:"timestamp"`
-	Link      *LinkedMessage `json:"link,omitempty"`
-	Body      *MessageBody   `json:"body,omitempty"`
-}
-
-// Text returns the comment's text content.
-func (c *CommentMessage) Text() string {
-	if c.Body != nil {
-		return c.Body.Text
-	}
-	return ""
-}
+// It has the same JSON shape as Message (comments never carry attachments
+// or forward another message, but otherwise parse identically, including
+// ReplyTo auto-population from a "reply"-type link).
+type CommentMessage = Message
 
 // GetComments retrieves comments left on a channel post.
 // The bot must be a channel administrator with the read_all_messages permission.
