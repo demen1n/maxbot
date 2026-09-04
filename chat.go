@@ -274,6 +274,7 @@ func (b *Bot) UnpinMessage(chatID int64) error {
 }
 
 // GetPinnedMessage retrieves the pinned message.
+// Returns (nil, nil) if the chat has no pinned message.
 func (b *Bot) GetPinnedMessage(chatID int64) (*Message, error) {
 	url := fmt.Sprintf("/chats/%d/pin", chatID)
 	data, err := b.Raw("GET", url, nil)
@@ -281,12 +282,14 @@ func (b *Bot) GetPinnedMessage(chatID int64) (*Message, error) {
 		return nil, err
 	}
 
-	var msg Message
-	if err := json.Unmarshal(data, &msg); err != nil {
+	var response struct {
+		Message *Message `json:"message"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err
 	}
 
-	return &msg, nil
+	return response.Message, nil
 }
 
 // SendChatAction sends a chat action (typing, sending photo, etc).
