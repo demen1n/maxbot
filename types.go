@@ -173,12 +173,11 @@ func (m *Message) Chat() *Chat {
 }
 
 // MessageSig returns message signature for compatibility with Editable interface.
-// Note: MAX API uses string mid, so message_id is always 0.
-func (m *Message) MessageSig() (int, int64) {
+func (m *Message) MessageSig() (string, int64) {
 	if m.RecipientInfo != nil {
-		return 0, m.RecipientInfo.ChatID
+		return m.Mid(), m.RecipientInfo.ChatID
 	}
-	return 0, 0
+	return m.Mid(), 0
 }
 
 // Mid returns MAX message ID as string.
@@ -250,11 +249,11 @@ type CallbackQuery struct {
 
 // StoredMessage is a lightweight message reference for database storage.
 type StoredMessage struct {
-	MessageID int   `json:"message_id"`
-	ChatID    int64 `json:"chat_id"`
+	MessageID string `json:"message_id"` // MAX message mid
+	ChatID    int64  `json:"chat_id"`
 }
 
-func (sm *StoredMessage) MessageSig() (int, int64) {
+func (sm *StoredMessage) MessageSig() (string, int64) {
 	return sm.MessageID, sm.ChatID
 }
 

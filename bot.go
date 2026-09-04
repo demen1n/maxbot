@@ -355,7 +355,7 @@ func (b *Bot) Delete(msg Editable) error {
 		return b.deleteMessage(mid)
 	}
 	msgID, _ := msg.MessageSig()
-	return b.deleteMessage(fmt.Sprintf("%d", msgID))
+	return b.deleteMessage(msgID)
 }
 
 // newSendMessage creates a SendMessage with the correct recipient field set.
@@ -387,6 +387,7 @@ type Sendable interface {
 }
 
 // Editable is any object that provides message signature for editing.
+// messageID is the MAX message mid (a string; MAX never uses integer IDs).
 type Editable interface {
-	MessageSig() (messageID int, chatID int64)
+	MessageSig() (messageID string, chatID int64)
 }

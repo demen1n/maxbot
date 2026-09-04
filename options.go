@@ -47,7 +47,7 @@ type linkedRef struct {
 
 // EditMessage represents a message edit request.
 type EditMessage struct {
-	MessageID int    `json:"message_id"`
+	MessageID string `json:"message_id"` // MAX message mid
 	ChatID    int64  `json:"chat_id"`
 	Text      string `json:"text"`
 }

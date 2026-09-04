@@ -24,21 +24,24 @@ func TestMessageChat(t *testing.T) {
 
 func TestMessageMessageSig(t *testing.T) {
 	id, chatID := (&Message{}).MessageSig()
-	if id != 0 || chatID != 0 {
-		t.Errorf("expected zero values with no RecipientInfo, got (%d, %d)", id, chatID)
+	if id != "" || chatID != 0 {
+		t.Errorf("expected zero values with no RecipientInfo/Body, got (%q, %d)", id, chatID)
 	}
 
-	msg := &Message{RecipientInfo: &RecipientInfo{ChatID: 7}}
+	msg := &Message{
+		RecipientInfo: &RecipientInfo{ChatID: 7},
+		Body:          &MessageBody{Mid: "mid.1"},
+	}
 	id, chatID = msg.MessageSig()
-	if id != 0 || chatID != 7 {
-		t.Errorf("expected (0, 7), got (%d, %d)", id, chatID)
+	if id != "mid.1" || chatID != 7 {
+		t.Errorf("expected (mid.1, 7), got (%q, %d)", id, chatID)
 	}
 }
 
 func TestStoredMessageMessageSig(t *testing.T) {
-	sm := &StoredMessage{MessageID: 5, ChatID: 42}
+	sm := &StoredMessage{MessageID: "mid.5", ChatID: 42}
 	id, chatID := sm.MessageSig()
-	if id != 5 || chatID != 42 {
-		t.Errorf("expected (5, 42), got (%d, %d)", id, chatID)
+	if id != "mid.5" || chatID != 42 {
+		t.Errorf("expected (mid.5, 42), got (%s, %d)", id, chatID)
 	}
 }
