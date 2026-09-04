@@ -22,6 +22,9 @@ func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 
 	return b.sendMessage(msg)
@@ -45,6 +48,9 @@ func (v *Video) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 	return b.sendMessage(msg)
 }
@@ -67,6 +73,9 @@ func (a *Audio) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 	return b.sendMessage(msg)
 }
@@ -89,6 +98,9 @@ func (d *Document) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, erro
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 	return b.sendMessage(msg)
 }
@@ -111,6 +123,9 @@ func (s *Sticker) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 	return b.sendMessage(msg)
 }
@@ -143,6 +158,9 @@ func (c *Contact) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 	return b.sendMessage(msg)
 }
@@ -164,6 +182,9 @@ func (l *Location) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, erro
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 	return b.sendMessage(msg)
 }
@@ -185,6 +206,9 @@ func (s *Share) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 		msg.Text = opts.Text
 		msg.Format = opts.Format
 		msg.Attachments = append(msg.Attachments, opts.Attachments...)
+		if opts.ReplyToMid != "" {
+			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
+		}
 	}
 	return b.sendMessage(msg)
 }

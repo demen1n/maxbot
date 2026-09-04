@@ -21,6 +21,29 @@ func captureAttachments(t *testing.T) (*Bot, *[]Attachment) {
 	return b, &got
 }
 
+// Context.Reply's *SendOptions{ReplyToMid: ...} must reach the outgoing
+// message for Sendable payloads (Sticker, Contact, Location, Share), not
+// just plain text.
+func TestSendableHonorsReplyToMid(t *testing.T) {
+	var gotLink *linkedRef
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Link *linkedRef `json:"link"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		gotLink = body.Link
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"message": map[string]interface{}{}})
+	}))
+
+	if _, err := b.Send(&User{ID: 1}, &Sticker{Code: "smile"}, &SendOptions{ReplyToMid: "mid.1"}); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if gotLink == nil || gotLink.Type != "reply" || gotLink.Mid != "mid.1" {
+		t.Fatalf("expected reply link to mid.1, got %+v", gotLink)
+	}
+}
+
 func TestStickerSendPayload(t *testing.T) {
 	b, got := captureAttachments(t)
 	if _, err := b.Send(&User{ID: 1}, &Sticker{Code: "smile"}); err != nil {
