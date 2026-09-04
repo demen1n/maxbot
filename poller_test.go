@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 )
@@ -180,6 +181,72 @@ func TestWebhookPollEndToEnd(t *testing.T) {
 	}
 	if _, ok := <-updates; ok {
 		t.Error("expected updates channel to be closed")
+	}
+}
+
+// A background-dispatched update (buffer-full path) must never race
+// Poll's close(updates) on shutdown. Using an unbuffered channel forces
+// every request that isn't immediately received onto that path.
+func TestWebhookPollBackgroundDispatchSurvivesShutdown(t *testing.T) {
+	b := makeBot(t)
+	hook := &Webhook{Listen: freeAddr(t), Endpoint: "/hook"}
+	updates := make(chan Update)
+	stop := make(chan struct{})
+
+	pollDone := make(chan struct{})
+	go func() {
+		hook.Poll(b, updates, stop)
+		close(pollDone)
+	}()
+
+	drainDone := make(chan struct{})
+	go func() {
+		for range updates {
+		}
+		close(drainDone)
+	}()
+
+	// Disable keep-alive so client connections don't linger past each
+	// request and inflate Webhook.Poll's graceful-shutdown wait -- this
+	// test is about the background-dispatch/close race, not connection
+	// reuse timing.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+
+	url := "http://" + hook.Listen + "/hook"
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := client.Post(url, "application/json", bytes.NewReader(webhookUpdate()))
+		if err == nil {
+			resp.Body.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, err := client.Post(url, "application/json", bytes.NewReader(webhookUpdate()))
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+	wg.Wait()
+
+	close(stop)
+
+	select {
+	case <-pollDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Poll did not return after stop")
+	}
+	select {
+	case <-drainDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("updates was never closed after all pending sends completed")
 	}
 }
 
