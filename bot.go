@@ -293,7 +293,7 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 		switch o := opt.(type) {
 		case *SendOptions:
 			msg.Format = o.Format
-			msg.Attachments = o.Attachments
+			msg.Attachments = append(msg.Attachments, o.Attachments...)
 			if o.ReplyToMid != "" {
 				msg.Link = &linkedRef{Type: "reply", Mid: o.ReplyToMid}
 			}
