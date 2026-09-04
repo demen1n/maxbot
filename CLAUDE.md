@@ -85,7 +85,7 @@ Notable: `Throttle`, `RateLimit`, and `Metrics` hold in-memory state that is los
 
 ### API client
 
-`api.go` communicates with `https://platform-api.max.ru`. The token is stored as-is and passed directly in the `Authorization` header (the MAX API does not use a `Bearer` prefix). `Raw()` is the generic request method. File uploads go through a two-step `GetUploadURL()` → `UploadFile()` flow.
+`api.go` communicates with `https://platform-api2.max.ru` (the API migrated from `platform-api.max.ru`; MAX recommends the new host for bots and mini-apps). The token is stored as-is and passed directly in the `Authorization` header (the MAX API does not use a `Bearer` prefix). `Raw()` is the generic request method. File uploads go through a two-step `GetUploadURL()` → `UploadFile()` flow.
 
 Edit/delete operations use `?message_id=` query params (not path segments). `*Message` always goes through `editMessageByMid` / `deleteMessage` using the string `mid`; `StoredMessage` uses its integer ID.
 

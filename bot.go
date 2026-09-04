@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DefaultAPIURL  = "https://platform-api.max.ru"
+	DefaultAPIURL  = "https://platform-api2.max.ru"
 	DefaultTimeout = 10 * time.Second
 	APIVersion     = "1.2.5"
 )
