@@ -15,13 +15,17 @@ type CallbackResponse struct {
 }
 
 // Attachment represents a message attachment (keyboard, file, etc).
-// Latitude/Longitude are only used by the "location" attachment type,
-// which per spec carries them as top-level fields rather than in Payload.
+// Latitude/Longitude are only used by the "location" attachment type, and
+// Buttons/Direct/DirectUserID only by "reply_keyboard" — per spec both carry
+// their fields at the top level of the attachment rather than under Payload.
 type Attachment struct {
-	Type      string                 `json:"type"`
-	Payload   map[string]interface{} `json:"payload,omitempty"`
-	Latitude  *float64               `json:"latitude,omitempty"`
-	Longitude *float64               `json:"longitude,omitempty"`
+	Type         string                 `json:"type"`
+	Payload      map[string]interface{} `json:"payload,omitempty"`
+	Latitude     *float64               `json:"latitude,omitempty"`
+	Longitude    *float64               `json:"longitude,omitempty"`
+	Buttons      [][]ReplyButton        `json:"buttons,omitempty"`
+	Direct       bool                   `json:"direct,omitempty"`
+	DirectUserID int64                  `json:"direct_user_id,omitempty"`
 }
 
 // SendMessage represents an outgoing message request.
@@ -75,16 +79,11 @@ func buildSendOptions(opts []interface{}) *SendOptions {
 			}
 		case *ReplyKeyboard:
 			if len(v.Buttons) > 0 {
-				payload := map[string]interface{}{"buttons": v.Buttons}
-				if v.Direct {
-					payload["direct"] = true
-				}
-				if v.DirectUserID != 0 {
-					payload["direct_user_id"] = v.DirectUserID
-				}
 				o.Attachments = append(o.Attachments, Attachment{
-					Type:    "reply_keyboard",
-					Payload: payload,
+					Type:         "reply_keyboard",
+					Buttons:      v.Buttons,
+					Direct:       v.Direct,
+					DirectUserID: v.DirectUserID,
 				})
 			}
 		}
