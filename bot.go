@@ -284,7 +284,7 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 	case string:
 		msg.Text = v
 	case Sendable:
-		return v.Send(b, to, parseSendOptions(opts))
+		return v.Send(b, to, buildSendOptions(opts))
 	default:
 		return nil, fmt.Errorf("unsupported sendable type: %T", what)
 	}

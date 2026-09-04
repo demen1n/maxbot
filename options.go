@@ -48,11 +48,46 @@ type EditMessage struct {
 	Text      string `json:"text"`
 }
 
-func parseSendOptions(opts []interface{}) *SendOptions {
+// buildSendOptions aggregates every recognized option (*SendOptions,
+// *ReplyMarkup, *ReplyKeyboard) into a single *SendOptions, converting
+// keyboards into attachments the same way Bot.Send does for plain-text
+// messages. This lets Sendable payloads (Photo, Sticker, ...) honor
+// keyboards passed alongside them.
+func buildSendOptions(opts []interface{}) *SendOptions {
+	o := &SendOptions{}
 	for _, opt := range opts {
-		if o, ok := opt.(*SendOptions); ok {
-			return o
+		switch v := opt.(type) {
+		case *SendOptions:
+			o.Text = v.Text
+			o.Format = v.Format
+			o.Attachments = append(o.Attachments, v.Attachments...)
+			if v.ReplyToMid != "" {
+				o.ReplyToMid = v.ReplyToMid
+			}
+		case *ReplyMarkup:
+			if len(v.InlineKeyboard) > 0 {
+				o.Attachments = append(o.Attachments, Attachment{
+					Type: "inline_keyboard",
+					Payload: map[string]interface{}{
+						"buttons": v.InlineKeyboard,
+					},
+				})
+			}
+		case *ReplyKeyboard:
+			if len(v.Buttons) > 0 {
+				payload := map[string]interface{}{"buttons": v.Buttons}
+				if v.Direct {
+					payload["direct"] = true
+				}
+				if v.DirectUserID != 0 {
+					payload["direct_user_id"] = v.DirectUserID
+				}
+				o.Attachments = append(o.Attachments, Attachment{
+					Type:    "reply_keyboard",
+					Payload: payload,
+				})
+			}
 		}
 	}
-	return &SendOptions{}
+	return o
 }
