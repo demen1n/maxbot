@@ -203,8 +203,8 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) 
 	if marker != nil {
 		path += fmt.Sprintf("&marker=%d", *marker)
 	}
-	for _, t := range types {
-		path += "&types[]=" + t
+	if len(types) > 0 {
+		path += "&types=" + strings.Join(types, ",")
 	}
 	url := b.URL + addVersionParam(path)
 

@@ -348,7 +348,7 @@ func TestGetUpdatesBuildsQueryAndParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getUpdates error: %v", err)
 	}
-	if gotQuery != fmt.Sprintf("timeout=30&limit=5&marker=10&types[]=message_created&types[]=bot_started&v=%s", APIVersion) {
+	if gotQuery != fmt.Sprintf("timeout=30&limit=5&marker=10&types=message_created,bot_started&v=%s", APIVersion) {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(updates) != 1 || updates[0].UpdateType != "message_created" {
