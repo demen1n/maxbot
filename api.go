@@ -276,9 +276,15 @@ func (b *Bot) Me() (*User, error) {
 // Commands are not part of this: MAX exposes a dedicated PATCH /me/commands
 // endpoint for them (see SetCommands).
 type BotPatch struct {
+	// Name sets the bot's visible name. Deprecated by MAX in favor of
+	// FirstName; kept for compatibility with existing callers.
 	Name        string `json:"name,omitempty"`
-	Username    string `json:"username,omitempty"`
+	FirstName   string `json:"first_name,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Commands replaces the bot's command list. Pass an empty (non-nil)
+	// slice to remove all commands; prefer SetCommands/DeleteCommands,
+	// which use the dedicated PATCH /me/commands endpoint instead.
+	Commands []BotCommand `json:"commands,omitempty"`
 }
 
 // PatchBot updates bot properties via PATCH /me.

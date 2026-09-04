@@ -395,9 +395,23 @@ func TestPatchBot(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"user_id": 1, "name": "New name"})
 	}))
-	user, err := b.PatchBot(BotPatch{Name: "New name"})
+	user, err := b.PatchBot(BotPatch{
+		Name:      "New name",
+		FirstName: "New",
+		Commands:  []BotCommand{{Name: "start", Description: "Start"}},
+	})
 	if err != nil {
 		t.Fatalf("PatchBot error: %v", err)
+	}
+	if gotBody["first_name"] != "New" {
+		t.Errorf("expected first_name in body, got %+v", gotBody)
+	}
+	if _, hasUsername := gotBody["username"]; hasUsername {
+		t.Error("username is not a real BotPatch field; must not be serialized")
+	}
+	cmds, ok := gotBody["commands"].([]interface{})
+	if !ok || len(cmds) != 1 {
+		t.Errorf("expected 1 command in body, got %+v", gotBody["commands"])
 	}
 	if gotMethod != http.MethodPatch || gotPath != "/me" {
 		t.Errorf("expected PATCH /me, got %s %s", gotMethod, gotPath)
