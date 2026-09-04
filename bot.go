@@ -306,6 +306,20 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 					},
 				})
 			}
+		case *ReplyKeyboard:
+			if len(o.Buttons) > 0 {
+				payload := map[string]interface{}{"buttons": o.Buttons}
+				if o.Direct {
+					payload["direct"] = true
+				}
+				if o.DirectUserID != 0 {
+					payload["direct_user_id"] = o.DirectUserID
+				}
+				msg.Attachments = append(msg.Attachments, Attachment{
+					Type:    "reply_keyboard",
+					Payload: payload,
+				})
+			}
 		}
 	}
 

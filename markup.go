@@ -167,3 +167,69 @@ func (r *ReplyMarkup) MessageBtn(text string) InlineButton {
 		Message: true,
 	}
 }
+
+// ReplyButton represents a button on a reply keyboard: shown next to the
+// input field, it sends a message on the user's behalf when tapped.
+// The button type is determined automatically by MarshalJSON.
+type ReplyButton struct {
+	Text    string `json:"text"`
+	Payload string `json:"payload,omitempty"`
+	Intent  Intent `json:"intent,omitempty"`
+
+	// Geolocation button ("user_geo_location")
+	Quick bool `json:"quick,omitempty"`
+
+	// Internal type selectors; not serialised.
+	Contact  bool `json:"-"`
+	Location bool `json:"-"`
+}
+
+// MarshalJSON serialises the button with an auto-computed "type" field.
+func (b *ReplyButton) MarshalJSON() ([]byte, error) {
+	type Alias ReplyButton
+	var btnType string
+	switch {
+	case b.Contact:
+		btnType = "user_contact"
+	case b.Location:
+		btnType = "user_geo_location"
+	default:
+		btnType = "message"
+	}
+	return json.Marshal(struct {
+		Type string `json:"type"`
+		*Alias
+	}{Type: btnType, Alias: (*Alias)(b)})
+}
+
+// ReplyKeyboard represents a reply keyboard attachment, shown next to the
+// input field instead of an inline keyboard under the message.
+type ReplyKeyboard struct {
+	Buttons [][]ReplyButton
+
+	// Direct restricts the keyboard to whoever mentioned or replied to the
+	// bot (chats only); DirectUserID restricts it to one specific user.
+	Direct       bool
+	DirectUserID int64
+}
+
+// Row adds a row of buttons to the reply keyboard.
+func (k *ReplyKeyboard) Row(buttons ...ReplyButton) {
+	k.Buttons = append(k.Buttons, buttons)
+}
+
+// Message creates a button that sends the given payload as a message on the user's behalf.
+func (k *ReplyKeyboard) Message(text, payload string) ReplyButton {
+	return ReplyButton{Text: text, Payload: payload}
+}
+
+// Contact creates a button that sends the user's contact card.
+func (k *ReplyKeyboard) Contact(text string) ReplyButton {
+	return ReplyButton{Text: text, Contact: true}
+}
+
+// Geolocation creates a button that sends the user's current location.
+// If quick is true, the location is sent immediately without a confirmation dialog.
+func (k *ReplyKeyboard) Geolocation(text string, quick bool) ReplyButton {
+	return ReplyButton{Text: text, Location: true, Quick: quick}
+}
