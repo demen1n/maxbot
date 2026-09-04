@@ -57,11 +57,10 @@ func (c *nativeContext) Sender() *User {
 
 // Chat returns the chat where the update occurred.
 func (c *nativeContext) Chat() *Chat {
+	// MessageCallbackUpdate carries the original message (with the pressed
+	// keyboard) at the top level, alongside — not nested inside — callback.
 	if c.update.Message != nil {
 		return c.update.Message.Chat()
-	}
-	if cb := c.update.CallbackQuery; cb != nil && cb.Message != nil {
-		return cb.Message.Chat()
 	}
 	// message_chat_created carries the full created Chat object.
 	if c.update.Chat != nil {

@@ -238,13 +238,15 @@ type Update struct {
 	StartPayload string `json:"start_payload,omitempty"`
 }
 
-// CallbackQuery represents a callback button press.
+// CallbackQuery represents a callback button press. Per the MAX schema this
+// object itself carries no message; the originating message (with the
+// pressed keyboard) arrives as the top-level "message" field of the
+// containing Update, alongside "callback" — see Update.Message.
 type CallbackQuery struct {
-	CallbackID string   `json:"callback_id"`
-	Timestamp  int64    `json:"timestamp"`
-	User       *User    `json:"user"`
-	Payload    string   `json:"payload"`
-	Message    *Message `json:"message,omitempty"`
+	CallbackID string `json:"callback_id"`
+	Timestamp  int64  `json:"timestamp"`
+	User       *User  `json:"user"`
+	Payload    string `json:"payload"`
 }
 
 // StoredMessage is a lightweight message reference for database storage.

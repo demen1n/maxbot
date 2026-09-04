@@ -52,9 +52,9 @@ Poller (LongPoller or Webhook)
 - **`Context`** (`context.go`) — interface passed to every handler; provides `Send()`, `Reply()`, `Edit()`, `Delete()`, `Respond()`, `Sender()`, `Chat()`, `Text()`, `Args()`, etc.
     - `Send()` sends to the current **chat** (not the user's DM); falls back to the sender only when no chat is available.
     - `Reply()` sends a quoted reply using the incoming message's `mid`.
-    - `Chat()` resolves the chat from both message updates and callback updates (via `CallbackQuery.Message`).
+    - `Chat()` resolves the chat from `Update.Message`, which MAX populates for callback updates too (the originating message is a top-level sibling of `callback`, not nested inside it).
 - **`Update` / `Message`** (`types.go`) — domain models; `Message` has custom JSON unmarshaling to auto-populate `ReplyTo` from `body.link`.
-- **`CallbackQuery`** (`types.go`) — includes a `Message` field with the originating message, used for chat resolution in callback handlers.
+- **`CallbackQuery`** (`types.go`) — carries only `callback_id`/`timestamp`/`user`/`payload`; it does not carry a `message` field itself (that lives on the containing `Update`, see above).
 - **`Poller`** (`poller.go`) — interface with two implementations: `LongPoller` (marker-based) and `Webhook` (HTTP server with optional secret verification; handler is non-blocking via buffered channel + goroutine fallback).
 - **`Sendable`** / **`Editable`** / **`Recipient`** — interfaces for flexible argument passing to `Send()` / `Edit()`. Implementations: `Photo`, `Video`, `Audio`, `Document`, `Sticker`, `Contact`, `Location`, `Share` (`sendable.go`).
 - **`ReplyMarkup`** / **`InlineButton`** (`markup.go`) — inline keyboard builder; `Data()` creates callback buttons, `URL()` creates link buttons.

@@ -1,6 +1,7 @@
 package maxbot
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -92,6 +93,39 @@ func TestChatFromNonMessageUpdate(t *testing.T) {
 	chat := c.Chat()
 	if chat == nil || chat.ID != 99 {
 		t.Errorf("expected chat ID=99, got %+v", chat)
+	}
+}
+
+// message_callback updates carry the originating message as a top-level
+// sibling of "callback" (per MAX's MessageCallbackUpdate schema), not
+// nested inside the callback object -- Update.Message already captures it
+// via the plain "message" JSON field, so Chat()/Message() need no special
+// callback-specific fallback.
+func TestChatAndMessageFromCallbackUpdate(t *testing.T) {
+	raw := `{
+		"update_type": "message_callback",
+		"callback": {"callback_id": "cb1", "payload": "p1", "user": {"user_id": 1}},
+		"message": {
+			"recipient": {"chat_id": 555, "chat_type": "dialog"},
+			"body": {"mid": "mid.1", "text": "menu"}
+		}
+	}`
+	var u Update
+	if err := json.Unmarshal([]byte(raw), &u); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	b := makeBot(t)
+	c := &nativeContext{b: b, update: u}
+
+	if c.Callback() == nil || c.Callback().CallbackID != "cb1" {
+		t.Fatalf("expected callback to be parsed, got %+v", c.Callback())
+	}
+	if c.Message() == nil || c.Message().Mid() != "mid.1" {
+		t.Fatalf("expected Message() to resolve the originating message, got %+v", c.Message())
+	}
+	if chat := c.Chat(); chat == nil || chat.ID != 555 {
+		t.Errorf("expected chat ID=555, got %+v", chat)
 	}
 }
 
