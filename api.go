@@ -32,17 +32,15 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	}
 	url := fmt.Sprintf("%s%s", b.URL, addVersionParam("/messages?"+recipientParam))
 
+	// NewMessageBody requires text/attachments/link to be present (each is
+	// nullable, but the key itself is required) -- always include them.
 	body := map[string]interface{}{
-		"text": msg.Text,
+		"text":        msg.Text,
+		"attachments": msg.Attachments,
+		"link":        msg.Link,
 	}
 	if msg.Format != "" {
 		body["format"] = msg.Format
-	}
-	if len(msg.Attachments) > 0 {
-		body["attachments"] = msg.Attachments
-	}
-	if msg.Link != nil {
-		body["link"] = msg.Link
 	}
 
 	var lastErr error
@@ -101,7 +99,13 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 		return fmt.Errorf("message mid is empty")
 	}
 
-	body := map[string]interface{}{}
+	// NewMessageBody requires attachments/link to be present (nullable);
+	// nil here means "leave attachments/link unchanged", per the API's own
+	// edit semantics -- exactly what a text-only edit intends.
+	body := map[string]interface{}{
+		"attachments": nil,
+		"link":        nil,
+	}
 	switch v := what.(type) {
 	case string:
 		body["text"] = v
@@ -170,8 +174,15 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 // editMessage edits a message via API using StoredMessage's mid.
 func (b *Bot) editMessage(edit *EditMessage) error {
 	path := "/messages?message_id=" + edit.MessageID
+	// NewMessageBody requires attachments/link to be present (nullable);
+	// nil means "leave unchanged", matching this text-only edit.
 	body := map[string]interface{}{
-		"text": edit.Text,
+		"text":        edit.Text,
+		"attachments": nil,
+		"link":        nil,
+	}
+	if edit.Format != "" {
+		body["format"] = edit.Format
 	}
 	data, err := b.Raw("PUT", path, body)
 	if err != nil {
