@@ -307,6 +307,30 @@ func TestProcessUpdateRecoversHandlerPanic(t *testing.T) {
 	}
 }
 
+// The spec allows LongPoller.Timeout up to 90s, but the HTTP client used to
+// be hardcoded to 30s regardless -- guaranteeing a client-side timeout on
+// any long-poll window above that. The client timeout must grow with it.
+func TestNewBotClientTimeoutCoversLongPollWindow(t *testing.T) {
+	b, err := NewBot(Settings{Token: "tok", Poller: &LongPoller{Timeout: 60 * time.Second}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Client.Timeout <= 60*time.Second {
+		t.Errorf("expected client timeout to exceed the 60s poll window, got %v", b.Client.Timeout)
+	}
+}
+
+func TestNewBotClientTimeoutDefault(t *testing.T) {
+	b, err := NewBot(Settings{Token: "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := DefaultTimeout + 30*time.Second
+	if b.Client.Timeout != want {
+		t.Errorf("expected default client timeout of %v, got %v", want, b.Client.Timeout)
+	}
+}
+
 // fakePoller lets TestStartStop exercise Bot.Start/Stop's lifecycle without
 // LongPoller making real network calls.
 type fakePoller struct {
