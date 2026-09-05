@@ -109,6 +109,53 @@ func TestEditMessageByMidIncludesNullAttachmentsAndLink(t *testing.T) {
 	}
 }
 
+// A2: Edit() must forward a *ReplyMarkup into the edit body's attachments
+// instead of silently dropping it (previously "attachments": null always
+// went out, wiping any existing keyboard and ignoring the new one).
+func TestEditByMidIncludesKeyboard(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	markup := &ReplyMarkup{}
+	markup.Row(markup.Data("Yes", "yes"))
+	msg := &Message{Body: &MessageBody{Mid: "mid.abc"}}
+	if err := b.Edit(msg, "new text", markup); err != nil {
+		t.Fatalf("Edit error: %v", err)
+	}
+	attachments, ok := gotBody["attachments"].([]interface{})
+	if !ok || len(attachments) != 1 {
+		t.Fatalf("expected 1 attachment carrying the keyboard, got %+v", gotBody["attachments"])
+	}
+	att, _ := attachments[0].(map[string]interface{})
+	if att["type"] != "inline_keyboard" {
+		t.Errorf("expected inline_keyboard attachment, got %+v", att)
+	}
+}
+
+// Same fix for the StoredMessage (message_id/chat_id) edit path.
+func TestEditStoredMessageIncludesKeyboard(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	markup := &ReplyMarkup{}
+	markup.Row(markup.Data("Yes", "yes"))
+	sm := &StoredMessage{MessageID: "mid.5", ChatID: 42}
+	if err := b.Edit(sm, "new text", markup); err != nil {
+		t.Fatalf("Edit error: %v", err)
+	}
+	attachments, ok := gotBody["attachments"].([]interface{})
+	if !ok || len(attachments) != 1 {
+		t.Fatalf("expected 1 attachment carrying the keyboard, got %+v", gotBody["attachments"])
+	}
+}
+
 // Requests must not carry an undocumented v= query param: it does not exist
 // in the live MAX Bot API spec (0.0.33) and MAX's own reference client treats
 // it as a no-op.

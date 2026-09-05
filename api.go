@@ -86,14 +86,16 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 }
 
 // editMessageByMid edits a message using MAX message ID (mid), retrying on attachment-not-ready errors.
-func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}) error {
+// sendOpts carries the aggregated Format/Attachments/ReplyToMid to apply; nil means text-only.
+func (b *Bot) editMessageByMid(mid string, what interface{}, sendOpts *SendOptions) error {
 	if mid == "" {
 		return fmt.Errorf("message mid is empty")
 	}
 
 	// NewMessageBody requires attachments/link to be present (nullable);
-	// nil here means "leave attachments/link unchanged", per the API's own
-	// edit semantics -- exactly what a text-only edit intends.
+	// nil means "leave attachments/link unchanged" per the API's edit
+	// semantics -- unless the caller explicitly passed attachments/a
+	// keyboard/a reply link, which must replace them.
 	body := map[string]interface{}{
 		"attachments": nil,
 		"link":        nil,
@@ -104,9 +106,15 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 	default:
 		return fmt.Errorf("unsupported editable type: %T", what)
 	}
-	for _, opt := range opts {
-		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
-			body["format"] = o.Format
+	if sendOpts != nil {
+		if sendOpts.Format != "" {
+			body["format"] = sendOpts.Format
+		}
+		if len(sendOpts.Attachments) > 0 {
+			body["attachments"] = sendOpts.Attachments
+		}
+		if sendOpts.ReplyToMid != "" {
+			body["link"] = &linkedRef{Type: "reply", Mid: sendOpts.ReplyToMid}
 		}
 	}
 
@@ -167,7 +175,8 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 func (b *Bot) editMessage(edit *EditMessage) error {
 	path := "/messages?message_id=" + edit.MessageID
 	// NewMessageBody requires attachments/link to be present (nullable);
-	// nil means "leave unchanged", matching this text-only edit.
+	// nil means "leave unchanged" unless the caller supplied attachments/a
+	// keyboard/a reply link, which must replace them.
 	body := map[string]interface{}{
 		"text":        edit.Text,
 		"attachments": nil,
@@ -176,19 +185,13 @@ func (b *Bot) editMessage(edit *EditMessage) error {
 	if edit.Format != "" {
 		body["format"] = edit.Format
 	}
-	data, err := b.Raw("PUT", path, body)
-	if err != nil {
-		return err
+	if len(edit.Attachments) > 0 {
+		body["attachments"] = edit.Attachments
 	}
-
-	var result SimpleQueryResult
-	if err := json.Unmarshal(data, &result); err != nil {
-		return err
+	if edit.Link != nil {
+		body["link"] = edit.Link
 	}
-	if !result.Success {
-		return errors.New(result.Message)
-	}
-	return nil
+	return b.rawSimple("PUT", path, body)
 }
 
 // deleteMessage deletes a message via API using its string mid.

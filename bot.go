@@ -321,17 +321,26 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 }
 
 // Edit edits an existing message.
-// For MAX API, uses message mid for editing.
+// For MAX API, uses message mid for editing. Any *ReplyMarkup/*ReplyKeyboard
+// passed in opts replaces the message's attachments, matching Send's
+// keyboard handling -- previously these were silently dropped.
 func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) error {
+	sendOpts := buildSendOptions(opts)
+
 	if m, ok := msg.(*Message); ok {
 		mid := m.Mid()
-		return b.editMessageByMid(mid, what, opts...)
+		return b.editMessageByMid(mid, what, sendOpts)
 	}
 
 	msgID, chatID := msg.MessageSig()
 	edit := &EditMessage{
-		MessageID: msgID,
-		ChatID:    chatID,
+		MessageID:   msgID,
+		ChatID:      chatID,
+		Format:      sendOpts.Format,
+		Attachments: sendOpts.Attachments,
+	}
+	if sendOpts.ReplyToMid != "" {
+		edit.Link = &linkedRef{Type: "reply", Mid: sendOpts.ReplyToMid}
 	}
 
 	switch v := what.(type) {
@@ -339,11 +348,6 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) error {
 		edit.Text = v
 	default:
 		return fmt.Errorf("unsupported editable type: %T", what)
-	}
-	for _, opt := range opts {
-		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
-			edit.Format = o.Format
-		}
 	}
 
 	return b.editMessage(edit)

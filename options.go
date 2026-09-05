@@ -47,10 +47,12 @@ type linkedRef struct {
 
 // EditMessage represents a message edit request.
 type EditMessage struct {
-	MessageID string `json:"message_id"` // MAX message mid
-	ChatID    int64  `json:"chat_id"`
-	Text      string `json:"text"`
-	Format    string `json:"format,omitempty"`
+	MessageID   string       `json:"message_id"` // MAX message mid
+	ChatID      int64        `json:"chat_id"`
+	Text        string       `json:"text"`
+	Format      string       `json:"format,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	Link        *linkedRef   `json:"link,omitempty"`
 }
 
 // buildSendOptions aggregates every recognized option (*SendOptions,
