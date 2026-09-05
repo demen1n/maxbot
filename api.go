@@ -14,14 +14,6 @@ import (
 
 const maxRetries = 4
 
-// addVersionParam appends v=APIVersion to a path that may already have query params.
-func addVersionParam(path string) string {
-	if strings.Contains(path, "?") {
-		return path + "&v=" + APIVersion
-	}
-	return path + "?v=" + APIVersion
-}
-
 // sendMessage sends a message via MAX API, retrying on attachment-not-ready errors.
 func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	var recipientParam string
@@ -30,7 +22,7 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	} else {
 		recipientParam = "user_id=" + msg.UserID
 	}
-	url := fmt.Sprintf("%s%s", b.URL, addVersionParam("/messages?"+recipientParam))
+	url := fmt.Sprintf("%s/messages?%s", b.URL, recipientParam)
 
 	// NewMessageBody requires text/attachments/link to be present (each is
 	// nullable, but the key itself is required) -- always include them.
@@ -118,7 +110,7 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 		}
 	}
 
-	url := fmt.Sprintf("%s%s", b.URL, addVersionParam(fmt.Sprintf("/messages?message_id=%s", mid)))
+	url := fmt.Sprintf("%s/messages?message_id=%s", b.URL, mid)
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -217,7 +209,7 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) 
 	if len(types) > 0 {
 		path += "&types=" + strings.Join(types, ",")
 	}
-	url := b.URL + addVersionParam(path)
+	url := b.URL + path
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -529,7 +521,7 @@ func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
 
 // Raw makes a raw API request.
 func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) {
-	url := b.URL + addVersionParam(endpoint)
+	url := b.URL + endpoint
 
 	var body io.Reader
 	if payload != nil {

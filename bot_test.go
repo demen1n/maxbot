@@ -276,7 +276,7 @@ func TestBotDeleteMessage(t *testing.T) {
 	if err := b.Delete(msg); err != nil {
 		t.Fatalf("Delete error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.9&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.9" {
 		t.Errorf("expected path /messages?message_id=mid.9, got %q", gotPath)
 	}
 }

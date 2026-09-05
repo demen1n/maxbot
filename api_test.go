@@ -3,10 +3,10 @@ package maxbot
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -109,11 +109,13 @@ func TestEditMessageByMidIncludesNullAttachmentsAndLink(t *testing.T) {
 	}
 }
 
-// TASK-11: all requests include v= query param.
-func TestRequestsIncludeAPIVersion(t *testing.T) {
-	var gotV string
+// Requests must not carry an undocumented v= query param: it does not exist
+// in the live MAX Bot API spec (0.0.33) and MAX's own reference client treats
+// it as a no-op.
+func TestRequestsOmitAPIVersion(t *testing.T) {
+	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotV = r.URL.Query().Get("v")
+		gotQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"message": map[string]interface{}{
@@ -125,8 +127,8 @@ func TestRequestsIncludeAPIVersion(t *testing.T) {
 
 	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
 	b.Send(&Chat{ID: 1}, "hi")
-	if gotV != APIVersion {
-		t.Errorf("expected v=%s in request, got %q", APIVersion, gotV)
+	if strings.Contains(gotQuery, "v=") {
+		t.Errorf("expected no v= query param, got query %q", gotQuery)
 	}
 }
 
@@ -330,7 +332,7 @@ func TestEditStoredMessage(t *testing.T) {
 	if err := b.Edit(sm, "updated text"); err != nil {
 		t.Fatalf("Edit error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.5&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.5" {
 		t.Errorf("expected path /messages?message_id=mid.5, got %q", gotPath)
 	}
 	if gotBody["text"] != "updated text" {
@@ -384,7 +386,7 @@ func TestDeleteStoredMessage(t *testing.T) {
 	if err := b.Delete(sm); err != nil {
 		t.Fatalf("Delete error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.7&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.7" {
 		t.Errorf("expected path /messages?message_id=mid.7, got %q", gotPath)
 	}
 }
@@ -416,7 +418,7 @@ func TestGetUpdatesBuildsQueryAndParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getUpdates error: %v", err)
 	}
-	if gotQuery != fmt.Sprintf("timeout=30&limit=5&marker=10&types=message_created,bot_started&v=%s", APIVersion) {
+	if gotQuery != "timeout=30&limit=5&marker=10&types=message_created,bot_started" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(updates) != 1 || updates[0].UpdateType != "message_created" {
@@ -555,7 +557,7 @@ func TestGetMessagesBuildsQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMessages error: %v", err)
 	}
-	if gotQuery != fmt.Sprintf("chat_id=42&count=10&from=100&to=200&v=%s", APIVersion) {
+	if gotQuery != "chat_id=42&count=10&from=100&to=200" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(msgs) != 1 || msgs[0].Text() != "hi" {

@@ -169,14 +169,14 @@ func TestContextEditAndDelete(t *testing.T) {
 	if err := c.Edit("new text"); err != nil {
 		t.Fatalf("Edit error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.9&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.9" {
 		t.Errorf("expected edit path, got %q", gotPath)
 	}
 
 	if err := c.Delete(); err != nil {
 		t.Fatalf("Delete error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.9&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.9" {
 		t.Errorf("expected delete path, got %q", gotPath)
 	}
 }

@@ -26,7 +26,7 @@ func TestGetCommentsBuildsQuery(t *testing.T) {
 	if gotPath != "/messages/mid.post1/comments" {
 		t.Errorf("expected path /messages/mid.post1/comments, got %q", gotPath)
 	}
-	if gotQuery != "comment_ids=mid.c1,mid.c2&after=100&before=200&count=10&v="+APIVersion {
+	if gotQuery != "comment_ids=mid.c1,mid.c2&after=100&before=200&count=10" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(comments) != 1 || comments[0].Text() != "hi" {
@@ -125,7 +125,7 @@ func TestEditCommentQueryAndFailure(t *testing.T) {
 	if err == nil || err.Error() != "not allowed" {
 		t.Fatalf("expected 'not allowed' error, got %v", err)
 	}
-	if gotQuery != "comment_id=mid.c1&v="+APIVersion {
+	if gotQuery != "comment_id=mid.c1" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 }
@@ -146,7 +146,7 @@ func TestDeleteCommentQuery(t *testing.T) {
 	if gotMethod != http.MethodDelete || gotPath != "/messages/mid.post1/comments" {
 		t.Errorf("expected DELETE /messages/mid.post1/comments, got %s %s", gotMethod, gotPath)
 	}
-	if gotQuery != "comment_id=mid.c1&v="+APIVersion {
+	if gotQuery != "comment_id=mid.c1" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 }

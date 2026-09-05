@@ -77,7 +77,7 @@ func TestGetSpecificChatMembersCommaSeparated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSpecificChatMembers error: %v", err)
 	}
-	if gotQuery != "user_ids=1,2&v="+APIVersion {
+	if gotQuery != "user_ids=1,2" {
 		t.Errorf("expected query user_ids=1,2, got %q", gotQuery)
 	}
 	if len(members) != 2 {
@@ -109,7 +109,7 @@ func TestGetChatMemberUsesFilterEndpoint(t *testing.T) {
 	if gotPath != "/chats/1/members" {
 		t.Errorf("expected path /chats/1/members, got %q", gotPath)
 	}
-	if gotQuery != "user_ids=42&v="+APIVersion {
+	if gotQuery != "user_ids=42" {
 		t.Errorf("expected query user_ids=42, got %q", gotQuery)
 	}
 	if member.User == nil || member.User.ID != 42 {
@@ -149,7 +149,7 @@ func TestGetChatsBuildsQueryAndMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetChats error: %v", err)
 	}
-	if gotQuery != "count=5&marker=10&v="+APIVersion {
+	if gotQuery != "count=5&marker=10" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(chats) != 1 || chats[0].ID != 1 {
@@ -284,7 +284,7 @@ func TestGetChatMembersPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetChatMembers error: %v", err)
 	}
-	if gotQuery != "count=20&marker=3&v="+APIVersion {
+	if gotQuery != "count=20&marker=3" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(members) != 1 {
