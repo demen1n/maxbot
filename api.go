@@ -193,8 +193,7 @@ func (b *Bot) editMessage(edit *EditMessage) error {
 
 // deleteMessage deletes a message via API using its string mid.
 func (b *Bot) deleteMessage(mid string) error {
-	_, err := b.Raw("DELETE", "/messages?message_id="+mid, nil)
-	return err
+	return b.rawSimple("DELETE", "/messages?message_id="+mid, nil)
 }
 
 // getUpdates retrieves updates via long polling.
@@ -312,6 +311,9 @@ func (b *Bot) SetCommands(commands []BotCommand) error {
 	payload := map[string]interface{}{
 		"commands": commands,
 	}
+	// PATCH /me/commands returns BotCommandsInfo (the resulting command
+	// list), not a SimpleQueryResult -- failures surface as non-200 status
+	// codes, which Raw already turns into an error.
 	_, err := b.Raw("PATCH", "/me/commands", payload)
 	return err
 }
@@ -517,6 +519,25 @@ func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// rawSimple performs a request whose response body is a SimpleQueryResult
+// (or an extension of it, like ModifyMembersResult) and turns a 200 OK
+// {"success": false} response into an error -- the MAX API reports failures
+// like "not found" or "no permission" this way instead of via HTTP status.
+func (b *Bot) rawSimple(method, endpoint string, payload interface{}) error {
+	data, err := b.Raw(method, endpoint, payload)
+	if err != nil {
+		return err
+	}
+	var result SimpleQueryResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return errors.New(result.Message)
+	}
+	return nil
 }
 
 // Raw makes a raw API request.

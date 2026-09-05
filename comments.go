@@ -2,7 +2,6 @@ package maxbot
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -92,36 +91,12 @@ func (b *Bot) PostComment(messageID, text, format string) (*CommentMessage, erro
 func (b *Bot) EditComment(messageID, commentID, text string) error {
 	path := fmt.Sprintf("/messages/%s/comments?comment_id=%s", url.PathEscape(messageID), url.QueryEscape(commentID))
 	payload := map[string]interface{}{"text": text}
-
-	data, err := b.Raw("PUT", path, payload)
-	if err != nil {
-		return err
-	}
-	var result SimpleQueryResult
-	if err := json.Unmarshal(data, &result); err != nil {
-		return err
-	}
-	if !result.Success {
-		return errors.New(result.Message)
-	}
-	return nil
+	return b.rawSimple("PUT", path, payload)
 }
 
 // DeleteComment removes a comment from a channel post.
 // The bot must be a channel administrator with read_all_messages and delete permissions.
 func (b *Bot) DeleteComment(messageID, commentID string) error {
 	path := fmt.Sprintf("/messages/%s/comments?comment_id=%s", url.PathEscape(messageID), url.QueryEscape(commentID))
-
-	data, err := b.Raw("DELETE", path, nil)
-	if err != nil {
-		return err
-	}
-	var result SimpleQueryResult
-	if err := json.Unmarshal(data, &result); err != nil {
-		return err
-	}
-	if !result.Success {
-		return errors.New(result.Message)
-	}
-	return nil
+	return b.rawSimple("DELETE", path, nil)
 }

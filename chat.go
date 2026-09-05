@@ -88,10 +88,12 @@ func (b *Bot) UpdateChat(chatID int64, fields map[string]interface{}) (*Chat, er
 }
 
 // DeleteChat removes a group chat.
+//
+// Deprecated: the live MAX Bot API spec (0.0.33) only declares get/patch
+// operations on /chats/{chatId}; delete is undocumented and may not work.
 func (b *Bot) DeleteChat(chatID int64) error {
 	url := fmt.Sprintf("/chats/%d", chatID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // GetChatMemberMe returns the bot's own membership info in the chat.
@@ -217,15 +219,13 @@ func (b *Bot) PromoteChatMember(chatID, userID int64, perms ...ChatAdminPermissi
 			{"user_id": userID, "permissions": perms},
 		},
 	}
-	_, err := b.Raw("POST", endpoint, payload)
-	return err
+	return b.rawSimple("POST", endpoint, payload)
 }
 
 // DemoteChatMember removes administrator rights from a user.
 func (b *Bot) DemoteChatMember(chatID int64, userID int64) error {
 	url := fmt.Sprintf("/chats/%d/members/admins/%d", chatID, userID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // KickChatMember removes a user from the chat.
@@ -235,8 +235,7 @@ func (b *Bot) KickChatMember(chatID, userID int64, block bool) error {
 	if block {
 		endpoint += "&block=true"
 	}
-	_, err := b.Raw("DELETE", endpoint, nil)
-	return err
+	return b.rawSimple("DELETE", endpoint, nil)
 }
 
 // InviteChatMembers adds users to the chat.
@@ -253,8 +252,7 @@ func (b *Bot) InviteChatMembers(chatID int64, userIDs []int64) error {
 // LeaveChat makes the bot leave the chat.
 func (b *Bot) LeaveChat(chatID int64) error {
 	url := fmt.Sprintf("/chats/%d/members/me", chatID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // PinMessage pins a message in the chat.
@@ -267,15 +265,13 @@ func (b *Bot) PinMessage(chatID int64, messageID string, notify *bool) error {
 	if notify != nil {
 		payload["notify"] = *notify
 	}
-	_, err := b.Raw("PUT", endpoint, payload)
-	return err
+	return b.rawSimple("PUT", endpoint, payload)
 }
 
 // UnpinMessage unpins the pinned message.
 func (b *Bot) UnpinMessage(chatID int64) error {
 	url := fmt.Sprintf("/chats/%d/pin", chatID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // GetPinnedMessage retrieves the pinned message.
@@ -304,6 +300,5 @@ func (b *Bot) SendChatAction(chatID int64, action ChatAction) error {
 		"action": string(action),
 	}
 
-	_, err := b.Raw("POST", url, payload)
-	return err
+	return b.rawSimple("POST", url, payload)
 }

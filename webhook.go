@@ -2,7 +2,6 @@ package maxbot
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/url"
 )
 
@@ -20,45 +19,13 @@ func (b *Bot) SetWebhook(url string, updateTypes []string, secret string) error 
 		payload["secret"] = secret
 	}
 
-	data, err := b.Raw("POST", "/subscriptions", payload)
-	if err != nil {
-		return err
-	}
-
-	var result struct {
-		Success bool   `json:"success"`
-		Message string `json:"message,omitempty"`
-	}
-
-	if err := json.Unmarshal(data, &result); err != nil {
-		return err
-	}
-
-	if !result.Success {
-		return fmt.Errorf("failed to set webhook: %s", result.Message)
-	}
-
-	return nil
+	return b.rawSimple("POST", "/subscriptions", payload)
 }
 
 // DeleteWebhook removes the webhook subscription for the given URL.
 func (b *Bot) DeleteWebhook(webhookURL string) error {
 	endpoint := "/subscriptions?url=" + url.QueryEscape(webhookURL)
-	data, err := b.Raw("DELETE", endpoint, nil)
-	if err != nil {
-		return err
-	}
-
-	var result SimpleQueryResult
-	if err := json.Unmarshal(data, &result); err != nil {
-		return err
-	}
-
-	if !result.Success {
-		return fmt.Errorf("failed to delete webhook: %s", result.Message)
-	}
-
-	return nil
+	return b.rawSimple("DELETE", endpoint, nil)
 }
 
 // GetWebhook returns all active webhook subscriptions.
