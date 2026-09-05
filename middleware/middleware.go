@@ -16,13 +16,25 @@ func Logger() maxbot.MiddlewareFunc {
 		return func(c maxbot.Context) error {
 			start := time.Now()
 
+			// Updates without a sender (message_removed, message_chat_created,
+			// bot_removed, etc.) still get logged, just without a "[Name] @user"
+			// prefix -- c.Sender() returns nil for those.
 			user := c.Sender()
 			text := c.Text()
 
-			if text != "" {
+			switch {
+			case user == nil:
+				if cb := c.Callback(); cb != nil {
+					log.Printf("callback(%s)", cb.Payload)
+				} else if text != "" {
+					log.Printf("%s", text)
+				}
+			case text != "":
 				log.Printf("[%s] @%s: %s", user.Name, user.Username, text)
-			} else if cb := c.Callback(); cb != nil {
-				log.Printf("[%s] @%s: callback(%s)", user.Name, user.Username, cb.Payload)
+			default:
+				if cb := c.Callback(); cb != nil {
+					log.Printf("[%s] @%s: callback(%s)", user.Name, user.Username, cb.Payload)
+				}
 			}
 
 			err := next(c)
@@ -76,7 +88,11 @@ func Whitelist(userIDs ...int64) maxbot.MiddlewareFunc {
 
 	return func(next maxbot.HandlerFunc) maxbot.HandlerFunc {
 		return func(c maxbot.Context) error {
-			if !allowed[c.Sender().ID] {
+			// No sender (message_removed, message_chat_created, etc.) means
+			// there's no user identity to check -- fail closed, same as an
+			// unlisted user.
+			sender := c.Sender()
+			if sender == nil || !allowed[sender.ID] {
 				return c.Send("⛔ У вас нет доступа к этой команде")
 			}
 			return next(c)
@@ -93,7 +109,7 @@ func Blacklist(userIDs ...int64) maxbot.MiddlewareFunc {
 
 	return func(next maxbot.HandlerFunc) maxbot.HandlerFunc {
 		return func(c maxbot.Context) error {
-			if blocked[c.Sender().ID] {
+			if sender := c.Sender(); sender != nil && blocked[sender.ID] {
 				return nil
 			}
 			return next(c)
@@ -112,8 +128,13 @@ func Throttle(d time.Duration) maxbot.MiddlewareFunc {
 
 	return func(next maxbot.HandlerFunc) maxbot.HandlerFunc {
 		return func(c maxbot.Context) error {
+			sender := c.Sender()
+			if sender == nil {
+				// No user to throttle against (message_removed, etc.).
+				return next(c)
+			}
 			k := key{
-				userID:  c.Sender().ID,
+				userID:  sender.ID,
 				handler: fmt.Sprintf("%p", next),
 			}
 
@@ -181,7 +202,7 @@ func CommandArgs(min int, usage string) maxbot.MiddlewareFunc {
 func IgnoreBots() maxbot.MiddlewareFunc {
 	return func(next maxbot.HandlerFunc) maxbot.HandlerFunc {
 		return func(c maxbot.Context) error {
-			if c.Sender().IsBot {
+			if sender := c.Sender(); sender != nil && sender.IsBot {
 				return nil
 			}
 			return next(c)
@@ -210,7 +231,12 @@ func RateLimit(max int, window time.Duration) maxbot.MiddlewareFunc {
 
 	return func(next maxbot.HandlerFunc) maxbot.HandlerFunc {
 		return func(c maxbot.Context) error {
-			userID := c.Sender().ID
+			sender := c.Sender()
+			if sender == nil {
+				// No user to rate-limit against (message_removed, etc.).
+				return next(c)
+			}
+			userID := sender.ID
 			now := time.Now()
 
 			req, exists := requests[userID]
@@ -285,7 +311,9 @@ func (m *Metrics) Middleware() maxbot.MiddlewareFunc {
 		return func(c maxbot.Context) error {
 			start := time.Now()
 
-			m.UniqueUsers[c.Sender().ID] = true
+			if sender := c.Sender(); sender != nil {
+				m.UniqueUsers[sender.ID] = true
+			}
 
 			if c.Message() != nil {
 				m.TotalMessages++
