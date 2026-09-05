@@ -637,6 +637,32 @@ func TestGetMessagesBuildsQuery(t *testing.T) {
 	}
 }
 
+// B4: GetMessagesByIDs must use message_ids, the other valid way to satisfy
+// GET /messages's "chat_id or message_ids" requirement.
+func TestGetMessagesByIDsBuildsQuery(t *testing.T) {
+	var gotQuery string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"messages": []map[string]interface{}{
+				{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.1", "text": "hi"}},
+				{"timestamp": 2, "body": map[string]interface{}{"mid": "mid.2", "text": "there"}},
+			},
+		})
+	}))
+	msgs, err := b.GetMessagesByIDs([]string{"mid.1", "mid.2"})
+	if err != nil {
+		t.Fatalf("GetMessagesByIDs error: %v", err)
+	}
+	if gotQuery != "message_ids=mid.1,mid.2" {
+		t.Errorf("unexpected query: %q", gotQuery)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("unexpected messages: %+v", msgs)
+	}
+}
+
 func TestGetMessage(t *testing.T) {
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/messages/mid.1" {

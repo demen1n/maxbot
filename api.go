@@ -497,8 +497,11 @@ func buildMultipart(fileName string, data []byte) (*bytes.Buffer, string, error)
 	return buf, w.FormDataContentType(), nil
 }
 
-// GetMessages retrieves messages in a chat.
-// from/to are optional timestamp boundaries (pass 0 to omit); count limits results.
+// GetMessages retrieves messages (or channel posts) in a chat by time range.
+// from/to are optional Unix-ms timestamp boundaries (pass 0 to omit); per
+// spec from is the upper time bound and to is the lower one -- i.e. results
+// walk backward from from down to to, so to is normally less than from, not
+// the other way round. count limits results (0 = server default, max 100).
 // The returned marker may always be nil: MAX's own MessageList response
 // schema declares only "messages", even though the endpoint's own
 // description mentions marker-based pagination -- this passes it through
@@ -514,7 +517,20 @@ func (b *Bot) GetMessages(chatID int64, count int, from, to int64) ([]Message, *
 	if to > 0 {
 		path += fmt.Sprintf("&to=%d", to)
 	}
+	return b.getMessages(path)
+}
 
+// GetMessagesByIDs retrieves specific messages (or channel posts) by mid,
+// using the message_ids query parameter -- the other way to satisfy GET
+// /messages's "chat_id or message_ids" requirement, for when the chat isn't
+// known or messages span more than one chat.
+func (b *Bot) GetMessagesByIDs(messageIDs []string) ([]Message, error) {
+	path := "/messages?message_ids=" + strings.Join(messageIDs, ",")
+	messages, _, err := b.getMessages(path)
+	return messages, err
+}
+
+func (b *Bot) getMessages(path string) ([]Message, *int64, error) {
 	data, err := b.Raw("GET", path, nil)
 	if err != nil {
 		return nil, nil, err
