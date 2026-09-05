@@ -202,6 +202,33 @@ func TestGetChat(t *testing.T) {
 	}
 }
 
+// C3: participants/dialog_with_user/pinned_message must not be dropped.
+func TestGetChatParsesFullFields(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"chat_id":          1,
+			"type":             "dialog",
+			"participants":     map[string]interface{}{"2": 1700000000},
+			"dialog_with_user": map[string]interface{}{"user_id": 2, "name": "Bob"},
+			"pinned_message":   map[string]interface{}{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.1", "text": "pinned"}},
+		})
+	}))
+	chat, err := b.GetChat(1)
+	if err != nil {
+		t.Fatalf("GetChat error: %v", err)
+	}
+	if chat.Participants["2"] != 1700000000 {
+		t.Errorf("expected participants[2]=1700000000, got %+v", chat.Participants)
+	}
+	if chat.DialogWithUser == nil || chat.DialogWithUser.Name != "Bob" {
+		t.Errorf("expected dialog_with_user Bob, got %+v", chat.DialogWithUser)
+	}
+	if chat.PinnedMessage == nil || chat.PinnedMessage.Text() != "pinned" {
+		t.Errorf("expected pinned_message text 'pinned', got %+v", chat.PinnedMessage)
+	}
+}
+
 func TestUpdateChat(t *testing.T) {
 	var gotMethod string
 	var gotBody map[string]interface{}

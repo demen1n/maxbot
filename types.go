@@ -5,7 +5,11 @@ import (
 	"fmt"
 )
 
-// User represents a MAX user.
+// User represents a MAX user or bot. Description/AvatarURL/FullAvatarURL
+// belong to the UserWithPhoto schema and Commands to BotInfo in the spec,
+// but MAX returns all of them flattened onto the same object shape
+// depending on context (GET /me returns BotInfo, for instance) -- so they
+// live here too rather than in separate Go types.
 type User struct {
 	ID             int64  `json:"user_id"`
 	Name           string `json:"name"`
@@ -16,6 +20,10 @@ type User struct {
 	LastActivityAt int64  `json:"last_activity_time"`
 	AvatarURL      string `json:"avatar_url,omitempty"`
 	FullAvatarURL  string `json:"full_avatar_url,omitempty"`
+	// Description is set for UserWithPhoto/BotInfo responses (e.g. GET /me).
+	Description string `json:"description,omitempty"`
+	// Commands is set only for BotInfo, returned by GET /me.
+	Commands []BotCommand `json:"commands,omitempty"`
 }
 
 // Recipient returns user ID as recipient identifier.
@@ -53,11 +61,24 @@ type Chat struct {
 	IsPublic          bool       `json:"is_public,omitempty"`
 	Link              string     `json:"link,omitempty"`
 	MessagesCount     int64      `json:"messages_count,omitempty"`
+	// Participants maps user_id (as a string key) to their last_event_time
+	// in the chat. Only populated when fetching a single chat, not a list.
+	Participants map[string]int64 `json:"participants,omitempty"`
+	// DialogWithUser is set only for chats of Type "dialog".
+	DialogWithUser *User `json:"dialog_with_user,omitempty"`
+	// PinnedMessage is only populated when fetching a single chat, not a list.
+	PinnedMessage *Message `json:"pinned_message,omitempty"`
 }
 
 // Recipient returns chat ID as recipient identifier.
 func (c *Chat) Recipient() string {
 	return fmt.Sprintf("%d", c.ID)
+}
+
+// MessageStat holds view statistics for a channel post; only returned for
+// channel posts, never for regular chat messages.
+type MessageStat struct {
+	Views int `json:"views"`
 }
 
 // Message represents a MAX message.
@@ -68,6 +89,10 @@ type Message struct {
 	Body          *MessageBody   `json:"body,omitempty"`
 	// Link is the quoted/forwarded message reference at the top-level Message object per spec.
 	Link *LinkedMessage `json:"link,omitempty"`
+	// Stat holds view counts; only set for channel posts.
+	Stat *MessageStat `json:"stat,omitempty"`
+	// URL is the public link to a channel post; empty for dialogs and group chats.
+	URL string `json:"url,omitempty"`
 
 	// ReplyTo is populated automatically from Link when type == "reply".
 	ReplyTo *LinkedMessage `json:"-"`
@@ -81,6 +106,8 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		Timestamp     int64          `json:"timestamp"`
 		Body          *MessageBody   `json:"body,omitempty"`
 		Link          *LinkedMessage `json:"link,omitempty"`
+		Stat          *MessageStat   `json:"stat,omitempty"`
+		URL           string         `json:"url,omitempty"`
 	}
 	var p plain
 	if err := json.Unmarshal(data, &p); err != nil {
@@ -91,6 +118,8 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	m.Timestamp = p.Timestamp
 	m.Body = p.Body
 	m.Link = p.Link
+	m.Stat = p.Stat
+	m.URL = p.URL
 	if m.Link != nil && m.Link.Type == "reply" {
 		m.ReplyTo = m.Link
 	}
@@ -110,10 +139,19 @@ type MessageBody struct {
 }
 
 // MarkupElement представляет элемент форматирования текста (bold, italic и т.д.).
+// MarkupElement.Type can be: strong, emphasized, monospaced, link,
+// strikethrough, underline, user_mention, heading, highlighted, quote.
 type MarkupElement struct {
 	From   int    `json:"from"`
 	Length int    `json:"length"`
-	Type   string `json:"type"` // "emphasized", "strong", "strikethrough", etc.
+	Type   string `json:"type"`
+	// URL is set when Type == "link" (LinkMarkup).
+	URL string `json:"url,omitempty"`
+	// UserLink and UserID are set when Type == "user_mention"
+	// (UserMentionMarkup): UserLink is the "@username" form, UserID the
+	// numeric form used when the mentioned user has no username.
+	UserLink string `json:"user_link,omitempty"`
+	UserID   int64  `json:"user_id,omitempty"`
 }
 
 // LinkedMessage представляет цитируемое или пересланное сообщение.
@@ -146,6 +184,9 @@ type RecipientInfo struct {
 	ChatID   int64  `json:"chat_id"`
 	ChatType string `json:"chat_type"`
 	UserID   int64  `json:"user_id"`
+	// PostID is the channel post a comment was left on; empty for
+	// non-comment messages.
+	PostID string `json:"post_id,omitempty"`
 }
 
 // Text returns message text content.
@@ -402,7 +443,11 @@ const (
 type WebhookInfo struct {
 	URL         string   `json:"url"`
 	UpdateTypes []string `json:"update_types,omitempty"`
-	Secret      string   `json:"secret,omitempty"`
+	// Time is the Unix ms timestamp the subscription was created;
+	// populated only when reading (GetWebhook), never sent in a request.
+	Time int64 `json:"time,omitempty"`
+	// Secret is write-only: GET /subscriptions never returns it back.
+	Secret string `json:"secret,omitempty"`
 }
 
 // UploadInfo represents upload URL information from MAX API.

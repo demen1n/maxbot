@@ -231,6 +231,26 @@ func TestMessageLinkParsed(t *testing.T) {
 	}
 }
 
+// C1: a channel post's stat/url must not be dropped.
+func TestMessageStatAndURLParsed(t *testing.T) {
+	raw := `{
+		"timestamp": 1700000000,
+		"body": {"mid": "mid.1", "seq": 1, "text": "a post"},
+		"stat": {"views": 42},
+		"url": "https://max.ru/channel/post/1"
+	}`
+	var msg Message
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if msg.Stat == nil || msg.Stat.Views != 42 {
+		t.Errorf("expected stat.views=42, got %+v", msg.Stat)
+	}
+	if msg.URL != "https://max.ru/channel/post/1" {
+		t.Errorf("expected url, got %q", msg.URL)
+	}
+}
+
 // TASK-4: UploadPhoto uses multipart and parses PhotoTokens response.
 func TestUploadPhotoMultipart(t *testing.T) {
 	// Two servers: one for GET /uploads (getUploadURL), one for the actual upload.
@@ -525,6 +545,32 @@ func TestMe(t *testing.T) {
 	}
 	if user.Name != "Bot" {
 		t.Errorf("expected name=Bot, got %q", user.Name)
+	}
+}
+
+// C5: GET /me returns BotInfo (description + commands), which Me() must not
+// silently drop.
+func TestMeParsesDescriptionAndCommands(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"user_id":     1,
+			"name":        "Bot",
+			"description": "A helpful bot",
+			"commands": []map[string]interface{}{
+				{"name": "start", "description": "Start the bot"},
+			},
+		})
+	}))
+	user, err := b.Me()
+	if err != nil {
+		t.Fatalf("Me error: %v", err)
+	}
+	if user.Description != "A helpful bot" {
+		t.Errorf("expected description, got %q", user.Description)
+	}
+	if len(user.Commands) != 1 || user.Commands[0].Name != "start" {
+		t.Errorf("expected 1 command 'start', got %+v", user.Commands)
 	}
 }
 
