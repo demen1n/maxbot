@@ -360,6 +360,35 @@ func TestEditMessageByMidFailure(t *testing.T) {
 	}
 }
 
+// SimpleQueryResult.message is optional, and 0.0.33 doesn't declare a 200
+// response schema at all for several endpoints editMessage/rawSimple cover --
+// so {"success": false} with no message is a real response shape, not just a
+// hypothetical one. The library must still return a non-empty error.
+func TestEditMessageByMidFailureEmptyMessage(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": false})
+	}))
+
+	msg := &Message{Body: &MessageBody{Mid: "mid.abc"}}
+	err := b.Edit(msg, "new text")
+	if err == nil || err.Error() == "" {
+		t.Fatalf("expected a non-empty error, got %v", err)
+	}
+}
+
+func TestRawSimpleFailureEmptyMessage(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": false})
+	}))
+
+	err := b.SendChatAction(1, ActionTyping)
+	if err == nil || err.Error() == "" {
+		t.Fatalf("expected a non-empty error, got %v", err)
+	}
+}
+
 // SetCommands must use the dedicated PATCH /me/commands endpoint, not PATCH /me.
 func TestSetCommandsUsesDedicatedEndpoint(t *testing.T) {
 	var gotMethod, gotPath string
