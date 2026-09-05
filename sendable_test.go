@@ -55,6 +55,28 @@ func TestPhotoSendPayload(t *testing.T) {
 	}
 }
 
+// C10: Photo must also support the url/token attachment sources, not just
+// freshly uploaded photo tokens.
+func TestPhotoFromURLSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	if _, err := b.Send(&User{ID: 1}, PhotoFromURL("https://example.com/pic.jpg")); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Payload["url"] != "https://example.com/pic.jpg" {
+		t.Fatalf("expected image attachment with url payload, got %+v", *got)
+	}
+}
+
+func TestPhotoFromTokenSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	if _, err := b.Send(&User{ID: 1}, PhotoFromToken("reused-tok")); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Payload["token"] != "reused-tok" {
+		t.Fatalf("expected image attachment with token payload, got %+v", *got)
+	}
+}
+
 func TestVideoSendPayload(t *testing.T) {
 	b, got := captureAttachments(t)
 	v := &Video{UploadedInfo: UploadedInfo{Token: "video-tok"}}

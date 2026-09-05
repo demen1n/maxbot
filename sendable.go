@@ -21,20 +21,40 @@ func (b *Bot) sendAttachment(to Recipient, attachment Attachment, opts *SendOpti
 	return b.sendMessage(msg)
 }
 
-// Photo represents an uploaded image ready to send.
-// Obtain via Bot.UploadPhoto.
+// Photo represents an image to send, via one of three mutually exclusive
+// sources: freshly uploaded tokens (the zero value plus PhotoTokens, as
+// returned by Bot.UploadPhoto), an external URL (PhotoFromURL), or a
+// previously uploaded attachment's reusable token (PhotoFromToken).
 type Photo struct {
 	PhotoTokens
+	url   string
+	token string
+}
+
+// PhotoFromURL creates a Photo that attaches an external image URL without
+// uploading it first.
+func PhotoFromURL(url string) *Photo {
+	return &Photo{url: url}
+}
+
+// PhotoFromToken creates a Photo that reuses a previously uploaded image's
+// token (see the /uploads docs on reusing tokens for frequently sent files).
+func PhotoFromToken(token string) *Photo {
+	return &Photo{token: token}
 }
 
 // Send implements Sendable interface for Photo.
 func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
-	return b.sendAttachment(to, Attachment{
-		Type: "image",
-		Payload: map[string]interface{}{
-			"photos": p.Photos,
-		},
-	}, opts)
+	payload := map[string]interface{}{}
+	switch {
+	case p.url != "":
+		payload["url"] = p.url
+	case p.token != "":
+		payload["token"] = p.token
+	default:
+		payload["photos"] = p.Photos
+	}
+	return b.sendAttachment(to, Attachment{Type: "image", Payload: payload}, opts)
 }
 
 // Video represents an uploaded video ready to send.
