@@ -35,7 +35,17 @@ const (
 	OnChatTitleChanged   = "\achat_title_changed"
 	OnDialogRemoved      = "\adialog_removed"
 	OnDialogCleared      = "\adialog_cleared"
+	OnDialogMuted        = "\adialog_muted"
+	OnDialogUnmuted      = "\adialog_unmuted"
 	OnMessageChatCreated = "\amessage_chat_created" // Chat button completed: new chat was created
+
+	// Comment events on channel posts (Comments API). These are routed
+	// before the generic message branch in match() -- a comment_created/
+	// comment_edited update carries a Message just like a regular chat
+	// message, but must never reach OnText/OnMessage/command handlers.
+	OnCommentCreated = "\acomment_created"
+	OnCommentEdited  = "\acomment_edited"
+	OnCommentRemoved = "\acomment_removed"
 )
 
 // Bot represents a MAX bot instance.
@@ -175,6 +185,18 @@ func (b *Bot) match(u Update) HandlerFunc {
 		return nil
 	}
 
+	// Comment events on channel posts carry a Message field just like
+	// message_created/message_edited, but must be routed here -- before the
+	// generic message branch below -- or a channel subscriber's comment
+	// would be delivered to OnText/OnMessage/command handlers meant for
+	// ordinary chat messages.
+	switch u.UpdateType {
+	case UpdateCommentCreated:
+		return b.handlers[OnCommentCreated]
+	case UpdateCommentEdited:
+		return b.handlers[OnCommentEdited]
+	}
+
 	// Message updates (message_created, message_edited).
 	if u.Message != nil {
 		// Edited messages get their own handler first.
@@ -241,6 +263,12 @@ func (b *Bot) match(u Update) HandlerFunc {
 		endpointKey = OnDialogRemoved
 	case UpdateDialogCleared:
 		endpointKey = OnDialogCleared
+	case UpdateDialogMuted:
+		endpointKey = OnDialogMuted
+	case UpdateDialogUnmuted:
+		endpointKey = OnDialogUnmuted
+	case UpdateCommentRemoved:
+		endpointKey = OnCommentRemoved
 	case UpdateMessageChatCreated:
 		endpointKey = OnMessageChatCreated
 	}

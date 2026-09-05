@@ -190,19 +190,28 @@ func (m *Message) Mid() string {
 
 // Update type constants.
 const (
-	UpdateMessageCreated     = "message_created"
-	UpdateMessageEdited      = "message_edited"
-	UpdateMessageRemoved     = "message_removed"
-	UpdateMessageCallback    = "message_callback"
-	UpdateBotAdded           = "bot_added"
-	UpdateBotRemoved         = "bot_removed"
-	UpdateBotStarted         = "bot_started"
-	UpdateBotStopped         = "bot_stopped"
-	UpdateUserAdded          = "user_added"
-	UpdateUserRemoved        = "user_removed"
-	UpdateChatTitleChanged   = "chat_title_changed"
-	UpdateDialogRemoved      = "dialog_removed"
-	UpdateDialogCleared      = "dialog_cleared"
+	UpdateMessageCreated   = "message_created"
+	UpdateMessageEdited    = "message_edited"
+	UpdateMessageRemoved   = "message_removed"
+	UpdateMessageCallback  = "message_callback"
+	UpdateBotAdded         = "bot_added"
+	UpdateBotRemoved       = "bot_removed"
+	UpdateBotStarted       = "bot_started"
+	UpdateBotStopped       = "bot_stopped"
+	UpdateUserAdded        = "user_added"
+	UpdateUserRemoved      = "user_removed"
+	UpdateChatTitleChanged = "chat_title_changed"
+	UpdateDialogRemoved    = "dialog_removed"
+	UpdateDialogCleared    = "dialog_cleared"
+	UpdateDialogMuted      = "dialog_muted"
+	UpdateDialogUnmuted    = "dialog_unmuted"
+	UpdateCommentCreated   = "comment_created"
+	UpdateCommentEdited    = "comment_edited"
+	UpdateCommentRemoved   = "comment_removed"
+	// UpdateMessageChatCreated is not documented on dev.max.ru and absent
+	// from the discriminator list of update_type in the live spec (0.0.33),
+	// but the MessageChatCreatedUpdate schema and ChatButton are still
+	// present in components -- kept for chats created via a Chat button.
 	UpdateMessageChatCreated = "message_chat_created"
 )
 
@@ -221,15 +230,26 @@ type Update struct {
 	Payload string `json:"payload,omitempty"` // bot_started deeplink
 	Title   string `json:"title,omitempty"`   // chat_title_changed
 
-	// Fields for message_removed.
+	// Fields for message_removed / comment_removed.
 	MessageID string `json:"message_id,omitempty"`
 	UserID    int64  `json:"user_id,omitempty"`
+	// PostID is the channel post a removed comment belonged to
+	// (message_removed, comment_removed); empty for a removed chat message.
+	PostID string `json:"post_id,omitempty"`
 
 	// Fields for user_added.
 	InviterID int64 `json:"inviter_id,omitempty"`
 
+	// AdminID is who removed User from the chat (user_removed); nil if the
+	// user left on their own.
+	AdminID *int64 `json:"admin_id,omitempty"`
+
 	// Fields for user_added / user_removed.
 	IsChannel bool `json:"is_channel,omitempty"`
+
+	// MutedUntil is the Unix ms timestamp until which the dialog is muted
+	// (dialog_muted only).
+	MutedUntil int64 `json:"muted_until,omitempty"`
 
 	// Fields for message_chat_created (fired when the first user taps a
 	// Chat button). MessageID (above) carries the id of the message the

@@ -198,6 +198,66 @@ func TestMatchTextAndFallback(t *testing.T) {
 	}
 }
 
+// A4: comment_created/comment_edited updates carry a Message just like
+// message_created, but must never fall through to OnText/OnMessage --
+// otherwise a bot with a text handler would answer channel comments as if
+// they were regular chat messages.
+func TestMatchCommentRoutingDoesNotLeakToMessageHandlers(t *testing.T) {
+	b := makeBot(t)
+	b.Handle(OnText, func(Context) error { return nil })
+	b.Handle(OnMessage, func(Context) error { return nil })
+
+	comment := Update{
+		UpdateType: UpdateCommentCreated,
+		Message:    &Message{Body: &MessageBody{Text: "nice post"}},
+	}
+	if h := b.match(comment); h != nil {
+		t.Error("expected comment_created to NOT match OnText/OnMessage handlers")
+	}
+
+	var called bool
+	b.Handle(OnCommentCreated, func(Context) error { called = true; return nil })
+	h := b.match(comment)
+	if h == nil {
+		t.Fatal("expected OnCommentCreated handler to match")
+	}
+	if err := h(&nativeContext{b: b, update: comment}); err != nil || !called {
+		t.Errorf("expected OnCommentCreated handler to run, called=%v err=%v", called, err)
+	}
+
+	edited := Update{UpdateType: UpdateCommentEdited, Message: &Message{Body: &MessageBody{Text: "edited"}}}
+	if h := b.match(edited); h != nil {
+		t.Error("expected comment_edited to NOT match OnText/OnMessage before OnCommentEdited is registered")
+	}
+	b.Handle(OnCommentEdited, func(Context) error { return nil })
+	if h := b.match(edited); h == nil {
+		t.Error("expected OnCommentEdited handler to match")
+	}
+
+	removed := Update{UpdateType: UpdateCommentRemoved}
+	if h := b.match(removed); h != nil {
+		t.Error("expected nil for comment_removed with no handler registered")
+	}
+	b.Handle(OnCommentRemoved, func(Context) error { return nil })
+	if h := b.match(removed); h == nil {
+		t.Error("expected OnCommentRemoved handler to match")
+	}
+}
+
+// A5: dialog_muted/dialog_unmuted must route to their own endpoints.
+func TestMatchDialogMuteRouting(t *testing.T) {
+	b := makeBot(t)
+	b.Handle(OnDialogMuted, func(Context) error { return nil })
+	b.Handle(OnDialogUnmuted, func(Context) error { return nil })
+
+	if h := b.match(Update{UpdateType: UpdateDialogMuted}); h == nil {
+		t.Error("expected OnDialogMuted handler to match")
+	}
+	if h := b.match(Update{UpdateType: UpdateDialogUnmuted}); h == nil {
+		t.Error("expected OnDialogUnmuted handler to match")
+	}
+}
+
 func TestMatchNoHandlerReturnsNil(t *testing.T) {
 	b := makeBot(t)
 	if h := b.match(Update{Message: &Message{Body: &MessageBody{Text: "hi"}}}); h != nil {
