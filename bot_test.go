@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -287,6 +288,47 @@ func TestProcessUpdateDispatchesAndReportsErrors(t *testing.T) {
 func TestProcessUpdateNoHandlerDoesNotPanic(t *testing.T) {
 	b := makeBot(t)
 	b.ProcessUpdate(Update{Message: &Message{Body: &MessageBody{Text: "hi"}}})
+}
+
+func TestProcessUpdateRecoversHandlerPanic(t *testing.T) {
+	b := makeBot(t)
+	var gotErr error
+	b.onError = func(err error, c Context) { gotErr = err }
+
+	b.Handle(OnText, func(Context) error { panic("boom") })
+
+	b.ProcessUpdate(Update{Message: &Message{Body: &MessageBody{Text: "hi"}}})
+
+	if gotErr == nil {
+		t.Fatal("expected onError to receive a converted panic error")
+	}
+	if !strings.Contains(gotErr.Error(), "boom") {
+		t.Errorf("expected error to mention panic value, got %v", gotErr)
+	}
+}
+
+// The spec allows LongPoller.Timeout up to 90s, but the HTTP client used to
+// be hardcoded to 30s regardless -- guaranteeing a client-side timeout on
+// any long-poll window above that. The client timeout must grow with it.
+func TestNewBotClientTimeoutCoversLongPollWindow(t *testing.T) {
+	b, err := NewBot(Settings{Token: "tok", Poller: &LongPoller{Timeout: 60 * time.Second}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Client.Timeout <= 60*time.Second {
+		t.Errorf("expected client timeout to exceed the 60s poll window, got %v", b.Client.Timeout)
+	}
+}
+
+func TestNewBotClientTimeoutDefault(t *testing.T) {
+	b, err := NewBot(Settings{Token: "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := DefaultTimeout + 30*time.Second
+	if b.Client.Timeout != want {
+		t.Errorf("expected default client timeout of %v, got %v", want, b.Client.Timeout)
+	}
 }
 
 // fakePoller lets TestStartStop exercise Bot.Start/Stop's lifecycle without

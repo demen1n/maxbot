@@ -119,7 +119,7 @@ func (a *Audio) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	return b.sendAttachment(to, Attachment{
 		Type:    "audio",
 		Payload: map[string]interface{}{"token": a.Token},
-	}, opts, exclusivityNone)
+	}, opts, exclusivitySolo)
 }
 
 // Document represents an uploaded file ready to send.

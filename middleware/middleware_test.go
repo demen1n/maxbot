@@ -457,3 +457,93 @@ func TestMetricsGetStatsZeroValue(t *testing.T) {
 		t.Error("expected non-empty stats for a fresh Metrics")
 	}
 }
+
+// Updates without a sender (message_removed, message_chat_created,
+// bot_removed, dialog_cleared, etc.) make c.Sender() return nil. Every
+// middleware that reads c.Sender() must handle that without panicking.
+func TestSenderMiddlewareHandlesNilSender(t *testing.T) {
+	t.Run("Logger", func(t *testing.T) {
+		called := false
+		h := Logger()(func(maxbot.Context) error { called = true; return nil })
+		if err := h(&fakeContext{text: "hi"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !called {
+			t.Error("expected next handler to run")
+		}
+	})
+
+	t.Run("Whitelist", func(t *testing.T) {
+		h := Whitelist(1)(okHandler())
+		c := &fakeContext{}
+		if err := h(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(c.sent) != 1 {
+			t.Error("expected a nil sender to be rejected like an unlisted user")
+		}
+	})
+
+	t.Run("Blacklist", func(t *testing.T) {
+		called := false
+		h := Blacklist(1)(func(maxbot.Context) error { called = true; return nil })
+		if err := h(&fakeContext{}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !called {
+			t.Error("expected a nil sender to reach the handler (nothing to block)")
+		}
+	})
+
+	t.Run("Throttle", func(t *testing.T) {
+		called := 0
+		h := Throttle(time.Hour)(func(maxbot.Context) error { called++; return nil })
+		c := &fakeContext{}
+		if err := h(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := h(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if called != 2 {
+			t.Errorf("expected a nil sender to bypass throttling, called=%d", called)
+		}
+	})
+
+	t.Run("IgnoreBots", func(t *testing.T) {
+		called := false
+		h := IgnoreBots()(func(maxbot.Context) error { called = true; return nil })
+		if err := h(&fakeContext{}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !called {
+			t.Error("expected a nil sender to reach the handler (can't confirm it's a bot)")
+		}
+	})
+
+	t.Run("RateLimit", func(t *testing.T) {
+		called := 0
+		h := RateLimit(1, time.Hour)(func(maxbot.Context) error { called++; return nil })
+		c := &fakeContext{}
+		if err := h(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := h(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if called != 2 {
+			t.Errorf("expected a nil sender to bypass rate limiting, called=%d", called)
+		}
+	})
+
+	t.Run("Metrics", func(t *testing.T) {
+		m := &Metrics{}
+		h := m.Middleware()(okHandler())
+		if err := h(&fakeContext{}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(m.UniqueUsers) != 0 {
+			t.Errorf("expected no unique user recorded for a nil sender, got %d", len(m.UniqueUsers))
+		}
+	})
+}

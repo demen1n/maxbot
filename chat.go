@@ -2,7 +2,6 @@ package maxbot
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -272,7 +271,7 @@ func (b *Bot) InviteChatMembers(chatID int64, userIDs []int64) (*ModifyMembersRe
 		return nil, err
 	}
 	if !result.Success {
-		return &result, errors.New(result.Message)
+		return &result, simpleResultError("POST "+url, result.Message)
 	}
 	return &result, nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -11,6 +12,11 @@ import (
 const (
 	DefaultAPIURL  = "https://platform-api2.max.ru"
 	DefaultTimeout = 10 * time.Second
+
+	// httpClientTimeoutMargin is added on top of LongPoller.Timeout when
+	// sizing the HTTP client's timeout, so the client never cuts a long-poll
+	// request off before the server's own timeout elapses.
+	httpClientTimeoutMargin = 30 * time.Second
 )
 
 // Common endpoint constants for message routing.
@@ -84,11 +90,16 @@ func NewBot(s Settings) (*Bot, error) {
 		s.Poller = &LongPoller{Timeout: DefaultTimeout}
 	}
 
+	clientTimeout := 30 * time.Second
+	if lp, ok := s.Poller.(*LongPoller); ok && lp.Timeout+httpClientTimeoutMargin > clientTimeout {
+		clientTimeout = lp.Timeout + httpClientTimeoutMargin
+	}
+
 	return &Bot{
 		Token:    s.Token,
 		URL:      s.URL,
 		Poller:   s.Poller,
-		Client:   &http.Client{Timeout: 30 * time.Second},
+		Client:   &http.Client{Timeout: clientTimeout},
 		Logger:   s.Logger,
 		handlers: make(map[string]HandlerFunc),
 		onError:  s.OnError,
@@ -134,12 +145,23 @@ func (b *Bot) ProcessUpdate(u Update) {
 		return
 	}
 
-	if err := handler(c); err != nil {
+	if err := b.safeHandle(handler, c); err != nil {
 		b.log("handler error: %v", err)
 		if b.onError != nil {
 			b.onError(err, c)
 		}
 	}
+}
+
+// safeHandle runs handler, converting any panic into an error so a single
+// bad update can't take down the whole polling loop in Start().
+func (b *Bot) safeHandle(handler HandlerFunc, c Context) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in handler: %v\n%s", r, debug.Stack())
+		}
+	}()
+	return handler(c)
 }
 
 // Handle registers a handler for the specified endpoint.

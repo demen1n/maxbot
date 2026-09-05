@@ -113,6 +113,31 @@ func TestPostCommentUnwrapsEnvelope(t *testing.T) {
 	}
 }
 
+// NewCommentBody.link is required (nullable) per spec -- the key must be
+// present even with no reply target, mirroring sendMessage's handling of
+// NewMessageBody.link.
+func TestCommentBodyAlwaysIncludesLinkKey(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": map[string]interface{}{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.c1", "text": "hi"}},
+		})
+	}))
+
+	if _, err := b.PostComment("mid.post1", "hi", ""); err != nil {
+		t.Fatalf("PostComment error: %v", err)
+	}
+	link, ok := gotBody["link"]
+	if !ok {
+		t.Fatal("expected \"link\" key to be present even without a reply target")
+	}
+	if link != nil {
+		t.Errorf("expected link to be null, got %v", link)
+	}
+}
+
 // C11: PostCommentReply must send a "reply" link so a comment can target
 // another comment, not just the post itself.
 func TestPostCommentReplyIncludesLink(t *testing.T) {

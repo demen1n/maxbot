@@ -173,7 +173,7 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, sendOpts *SendOptio
 			return err
 		}
 		if !result.Success {
-			return errors.New(result.Message)
+			return simpleResultError("PUT /messages?message_id="+mid, result.Message)
 		}
 		return nil
 	}
@@ -598,9 +598,20 @@ func (b *Bot) rawSimple(method, endpoint string, payload interface{}) error {
 		return err
 	}
 	if !result.Success {
-		return errors.New(result.Message)
+		return simpleResultError(method+" "+endpoint, result.Message)
 	}
 	return nil
+}
+
+// simpleResultError builds the error for a {"success": false} SimpleQueryResult.
+// The spec makes SimpleQueryResult.message optional, and doesn't even declare
+// a 200 response schema for several endpoints rawSimple is used for -- so op
+// failing without any message text is a real, not hypothetical, case.
+func simpleResultError(op, message string) error {
+	if message != "" {
+		return errors.New(message)
+	}
+	return fmt.Errorf("maxbot: %s failed without a message", op)
 }
 
 // Raw makes a raw API request.
