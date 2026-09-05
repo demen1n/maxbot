@@ -266,12 +266,37 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) 
 // respondCallback responds to a callback query.
 // callback_id is sent as a query parameter per the MAX API spec.
 func (b *Bot) respondCallback(callbackID string, resp *CallbackResponse) error {
+	path := "/answers?callback_id=" + callbackID
+
 	body := map[string]interface{}{}
-	if resp != nil && resp.Text != "" {
-		body["notification"] = resp.Text
+	if resp != nil {
+		if resp.Text != "" {
+			body["notification"] = resp.Text
+		}
+		if resp.Message != nil {
+			m := resp.Message
+			msgBody := map[string]interface{}{
+				"text":        m.Text,
+				"attachments": m.Attachments,
+				"link":        nil,
+			}
+			if m.Format != "" {
+				msgBody["format"] = m.Format
+			}
+			if m.ReplyToMid != "" {
+				msgBody["link"] = &linkedRef{Type: "reply", Mid: m.ReplyToMid}
+			}
+			if m.Notify != nil {
+				msgBody["notify"] = *m.Notify
+			}
+			body["message"] = msgBody
+		}
+		if resp.DisableLinkPreview {
+			path += "&disable_link_preview=true"
+		}
 	}
-	_, err := b.Raw("POST", "/answers?callback_id="+callbackID, body)
-	return err
+
+	return b.rawSimple("POST", path, body)
 }
 
 // Me returns information about the bot.

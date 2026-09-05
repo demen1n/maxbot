@@ -18,10 +18,23 @@ type SendOptions struct {
 	DisableLinkPreview bool
 }
 
-// CallbackResponse represents a response to a callback query.
-// Text is the notification toast shown to the user.
+// CallbackResponse represents a response to a callback query (POST /answers).
 type CallbackResponse struct {
+	// Text sends a one-time toast notification to the user. This maps to
+	// the "notification" field, which the live spec (0.0.33) no longer
+	// documents on CallbackAnswer -- kept for compatibility since the
+	// server still appears to accept it.
 	Text string
+
+	// Message, if set, replaces the message the pressed button was on
+	// (CallbackAnswer.message, a NewMessageBody). Text/Format/Attachments/
+	// ReplyToMid/Notify are honored the same way as in Bot.Edit; build
+	// Attachments the same way Send does for a keyboard (an
+	// "inline_keyboard" Attachment) to redraw the button row.
+	Message *SendOptions
+
+	// DisableLinkPreview suppresses link preview generation for Message's text.
+	DisableLinkPreview bool
 }
 
 // Attachment represents a message attachment (keyboard, file, etc).
