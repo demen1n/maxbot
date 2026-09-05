@@ -387,7 +387,15 @@ const (
 	ActionSendingVideo ChatAction = "sending_video"
 	ActionSendingAudio ChatAction = "sending_audio"
 	ActionSendingFile  ChatAction = "sending_file"
-	ActionMarkSeen     ChatAction = "mark_seen"
+
+	// ActionMarkSeen is not part of the live SenderAction enum (0.0.33; it
+	// only lists typing_on/sending_photo/sending_video/sending_audio/
+	// sending_file) -- it existed in the older 0.0.10 schema alongside
+	// typing_off, which is also gone.
+	//
+	// Deprecated: sending it will likely be rejected by the API. Kept only
+	// for source compatibility with existing callers.
+	ActionMarkSeen ChatAction = "mark_seen"
 )
 
 // WebhookInfo represents webhook subscription information.
