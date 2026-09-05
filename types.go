@@ -298,8 +298,24 @@ const (
 	PermWrite            ChatAdminPermission = "write"
 	PermEdit             ChatAdminPermission = "edit"
 	PermDelete           ChatAdminPermission = "delete"
-	PermCanCall          ChatAdminPermission = "can_call"
-	PermViewStats        ChatAdminPermission = "view_stats"
+	// PermCanCall is documented as assigned automatically by MAX and
+	// unavailable in channels; granting it explicitly has no effect.
+	PermCanCall ChatAdminPermission = "can_call"
+
+	// Legacy permission values: absent from the live ChatAdminPermission
+	// enum (0.0.33) and not grantable, but MAX's own docs say a
+	// ChatMember.permissions response may still return them for
+	// pre-existing admins. Recognize them when reading, never grant them.
+	PermPostEditDeleteMessage ChatAdminPermission = "post_edit_delete_message"
+	PermEditMessage           ChatAdminPermission = "edit_message"
+	PermDeleteMessage         ChatAdminPermission = "delete_message"
+
+	// PermViewStats is not part of the live ChatAdminPermission enum at all
+	// (0.0.33); it is documented in prose as an owner-only channel
+	// capability that a bot admin can never hold. Kept only so callers who
+	// see it in prose/older docs don't hit an undefined identifier; do not
+	// grant it via PromoteChatMember.
+	PermViewStats ChatAdminPermission = "view_stats"
 )
 
 // ChatMember represents a chat participant.
@@ -312,6 +328,10 @@ type ChatMember struct {
 	JoinTime       int64                 `json:"join_time"`
 	LastAccessTime int64                 `json:"last_access_time"`
 	Permissions    []ChatAdminPermission `json:"permissions,omitempty"`
+	// Alias is the custom role label shown next to the member's name in the
+	// chat/channel settings UI; empty if none was set (the client then
+	// substitutes "owner"/"admin" on its own).
+	Alias string `json:"alias,omitempty"`
 }
 
 // UnmarshalJSON reads flat user fields from the API response into the nested User struct.
@@ -333,6 +353,7 @@ func (m *ChatMember) UnmarshalJSON(data []byte) error {
 		JoinTime       int64                 `json:"join_time"`
 		LastAccessTime int64                 `json:"last_access_time"`
 		Permissions    []ChatAdminPermission `json:"permissions"`
+		Alias          string                `json:"alias"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -353,6 +374,7 @@ func (m *ChatMember) UnmarshalJSON(data []byte) error {
 	m.JoinTime = raw.JoinTime
 	m.LastAccessTime = raw.LastAccessTime
 	m.Permissions = raw.Permissions
+	m.Alias = raw.Alias
 	return nil
 }
 

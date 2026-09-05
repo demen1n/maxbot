@@ -295,7 +295,11 @@ func TestGetChatMembersPagination(t *testing.T) {
 	}
 }
 
-func TestPromoteChatMemberDefaultsAllPermissions(t *testing.T) {
+// B1: the default permission set must exclude view_stats (not part of the
+// ChatAdminPermission enum -- an owner-only capability the request would
+// reject) and can_call (assigned automatically by MAX; explicit grants have
+// no effect).
+func TestPromoteChatMemberDefaultsSafePermissions(t *testing.T) {
 	var gotBody struct {
 		Admins []struct {
 			UserID      int64    `json:"user_id"`
@@ -315,8 +319,33 @@ func TestPromoteChatMemberDefaultsAllPermissions(t *testing.T) {
 	if len(gotBody.Admins) != 1 || gotBody.Admins[0].UserID != 2 {
 		t.Fatalf("unexpected admins body: %+v", gotBody.Admins)
 	}
-	if len(gotBody.Admins[0].Permissions) != 11 {
-		t.Errorf("expected all 11 default permissions, got %v", gotBody.Admins[0].Permissions)
+	for _, p := range gotBody.Admins[0].Permissions {
+		if p == string(PermViewStats) || p == string(PermCanCall) {
+			t.Errorf("default permissions must not include %q", p)
+		}
+	}
+	if len(gotBody.Admins[0].Permissions) != len(defaultAdminPermissions) {
+		t.Errorf("expected %d default permissions, got %v", len(defaultAdminPermissions), gotBody.Admins[0].Permissions)
+	}
+}
+
+// PromoteChatMemberWithAlias must include the alias field when set.
+func TestPromoteChatMemberWithAlias(t *testing.T) {
+	var gotBody struct {
+		Admins []struct {
+			Alias string `json:"alias"`
+		} `json:"admins"`
+	}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	if err := b.PromoteChatMemberWithAlias(1, 2, "Moderator", PermPinMessage); err != nil {
+		t.Fatalf("PromoteChatMemberWithAlias error: %v", err)
+	}
+	if len(gotBody.Admins) != 1 || gotBody.Admins[0].Alias != "Moderator" {
+		t.Errorf("expected alias=Moderator, got %+v", gotBody.Admins)
 	}
 }
 

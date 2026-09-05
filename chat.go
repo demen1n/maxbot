@@ -195,29 +195,40 @@ func (b *Bot) GetChatAdmins(chatID int64) ([]ChatMember, *int64, error) {
 	return response.Members, response.Marker, nil
 }
 
+// defaultAdminPermissions are granted by PromoteChatMember when no
+// permissions are explicitly requested. It excludes view_stats (not part of
+// the ChatAdminPermission enum -- an owner-only capability the request would
+// reject) and can_call (assigned automatically by MAX; explicit grants have
+// no effect and it is unavailable in channels).
+var defaultAdminPermissions = []ChatAdminPermission{
+	PermReadAllMessages,
+	PermAddRemoveMembers,
+	PermAddAdmins,
+	PermChangeChatInfo,
+	PermPinMessage,
+	PermWrite,
+}
+
 // PromoteChatMember grants admin rights to a user.
-// perms lists the permissions to grant; if empty, all permissions are granted.
+// perms lists the permissions to grant; if empty, defaultAdminPermissions are granted.
 func (b *Bot) PromoteChatMember(chatID, userID int64, perms ...ChatAdminPermission) error {
+	return b.PromoteChatMemberWithAlias(chatID, userID, "", perms...)
+}
+
+// PromoteChatMemberWithAlias grants admin rights to a user, optionally
+// labeling the role with a custom alias shown in the chat UI (ChatAdmin.alias).
+// perms lists the permissions to grant; if empty, defaultAdminPermissions are granted.
+func (b *Bot) PromoteChatMemberWithAlias(chatID, userID int64, alias string, perms ...ChatAdminPermission) error {
 	if len(perms) == 0 {
-		perms = []ChatAdminPermission{
-			PermReadAllMessages,
-			PermAddRemoveMembers,
-			PermAddAdmins,
-			PermChangeChatInfo,
-			PermPinMessage,
-			PermEditLink,
-			PermWrite,
-			PermEdit,
-			PermDelete,
-			PermCanCall,
-			PermViewStats,
-		}
+		perms = defaultAdminPermissions
+	}
+	admin := map[string]interface{}{"user_id": userID, "permissions": perms}
+	if alias != "" {
+		admin["alias"] = alias
 	}
 	endpoint := fmt.Sprintf("/chats/%d/members/admins", chatID)
 	payload := map[string]interface{}{
-		"admins": []map[string]interface{}{
-			{"user_id": userID, "permissions": perms},
-		},
+		"admins": []map[string]interface{}{admin},
 	}
 	return b.rawSimple("POST", endpoint, payload)
 }
