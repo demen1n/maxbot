@@ -77,7 +77,7 @@ func TestGetSpecificChatMembersCommaSeparated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSpecificChatMembers error: %v", err)
 	}
-	if gotQuery != "user_ids=1,2&v="+APIVersion {
+	if gotQuery != "user_ids=1,2" {
 		t.Errorf("expected query user_ids=1,2, got %q", gotQuery)
 	}
 	if len(members) != 2 {
@@ -109,7 +109,7 @@ func TestGetChatMemberUsesFilterEndpoint(t *testing.T) {
 	if gotPath != "/chats/1/members" {
 		t.Errorf("expected path /chats/1/members, got %q", gotPath)
 	}
-	if gotQuery != "user_ids=42&v="+APIVersion {
+	if gotQuery != "user_ids=42" {
 		t.Errorf("expected query user_ids=42, got %q", gotQuery)
 	}
 	if member.User == nil || member.User.ID != 42 {
@@ -149,7 +149,7 @@ func TestGetChatsBuildsQueryAndMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetChats error: %v", err)
 	}
-	if gotQuery != "count=5&marker=10&v="+APIVersion {
+	if gotQuery != "count=5&marker=10" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(chats) != 1 || chats[0].ID != 1 {
@@ -199,6 +199,33 @@ func TestGetChat(t *testing.T) {
 	}
 	if chat.Title != "Test" {
 		t.Errorf("expected title Test, got %q", chat.Title)
+	}
+}
+
+// C3: participants/dialog_with_user/pinned_message must not be dropped.
+func TestGetChatParsesFullFields(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"chat_id":          1,
+			"type":             "dialog",
+			"participants":     map[string]interface{}{"2": 1700000000},
+			"dialog_with_user": map[string]interface{}{"user_id": 2, "name": "Bob"},
+			"pinned_message":   map[string]interface{}{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.1", "text": "pinned"}},
+		})
+	}))
+	chat, err := b.GetChat(1)
+	if err != nil {
+		t.Fatalf("GetChat error: %v", err)
+	}
+	if chat.Participants["2"] != 1700000000 {
+		t.Errorf("expected participants[2]=1700000000, got %+v", chat.Participants)
+	}
+	if chat.DialogWithUser == nil || chat.DialogWithUser.Name != "Bob" {
+		t.Errorf("expected dialog_with_user Bob, got %+v", chat.DialogWithUser)
+	}
+	if chat.PinnedMessage == nil || chat.PinnedMessage.Text() != "pinned" {
+		t.Errorf("expected pinned_message text 'pinned', got %+v", chat.PinnedMessage)
 	}
 }
 
@@ -284,7 +311,7 @@ func TestGetChatMembersPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetChatMembers error: %v", err)
 	}
-	if gotQuery != "count=20&marker=3&v="+APIVersion {
+	if gotQuery != "count=20&marker=3" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(members) != 1 {
@@ -295,7 +322,11 @@ func TestGetChatMembersPagination(t *testing.T) {
 	}
 }
 
-func TestPromoteChatMemberDefaultsAllPermissions(t *testing.T) {
+// B1: the default permission set must exclude view_stats (not part of the
+// ChatAdminPermission enum -- an owner-only capability the request would
+// reject) and can_call (assigned automatically by MAX; explicit grants have
+// no effect).
+func TestPromoteChatMemberDefaultsSafePermissions(t *testing.T) {
 	var gotBody struct {
 		Admins []struct {
 			UserID      int64    `json:"user_id"`
@@ -315,8 +346,33 @@ func TestPromoteChatMemberDefaultsAllPermissions(t *testing.T) {
 	if len(gotBody.Admins) != 1 || gotBody.Admins[0].UserID != 2 {
 		t.Fatalf("unexpected admins body: %+v", gotBody.Admins)
 	}
-	if len(gotBody.Admins[0].Permissions) != 11 {
-		t.Errorf("expected all 11 default permissions, got %v", gotBody.Admins[0].Permissions)
+	for _, p := range gotBody.Admins[0].Permissions {
+		if p == string(PermViewStats) || p == string(PermCanCall) {
+			t.Errorf("default permissions must not include %q", p)
+		}
+	}
+	if len(gotBody.Admins[0].Permissions) != len(defaultAdminPermissions) {
+		t.Errorf("expected %d default permissions, got %v", len(defaultAdminPermissions), gotBody.Admins[0].Permissions)
+	}
+}
+
+// PromoteChatMemberWithAlias must include the alias field when set.
+func TestPromoteChatMemberWithAlias(t *testing.T) {
+	var gotBody struct {
+		Admins []struct {
+			Alias string `json:"alias"`
+		} `json:"admins"`
+	}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	if err := b.PromoteChatMemberWithAlias(1, 2, "Moderator", PermPinMessage); err != nil {
+		t.Fatalf("PromoteChatMemberWithAlias error: %v", err)
+	}
+	if len(gotBody.Admins) != 1 || gotBody.Admins[0].Alias != "Moderator" {
+		t.Errorf("expected alias=Moderator, got %+v", gotBody.Admins)
 	}
 }
 
@@ -369,11 +425,36 @@ func TestInviteChatMembers(t *testing.T) {
 	defer srv.Close()
 
 	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
-	if err := b.InviteChatMembers(1, []int64{2, 3}); err != nil {
+	if _, err := b.InviteChatMembers(1, []int64{2, 3}); err != nil {
 		t.Fatalf("InviteChatMembers error: %v", err)
 	}
 	if len(gotBody.UserIDs) != 2 || gotBody.UserIDs[0] != 2 || gotBody.UserIDs[1] != 3 {
 		t.Errorf("unexpected user_ids: %v", gotBody.UserIDs)
+	}
+}
+
+// B6: a partial failure must be reported, not swallowed as full success.
+func TestInviteChatMembersPartialFailure(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":         false,
+			"message":         "some users were not added",
+			"failed_user_ids": []int64{3},
+			"failed_user_details": []map[string]interface{}{
+				{"error_code": "add.participant.privacy", "user_ids": []int64{3}},
+			},
+		})
+	}))
+
+	result, err := b.InviteChatMembers(1, []int64{2, 3})
+	if err == nil {
+		t.Fatal("expected error for partial failure")
+	}
+	if result == nil || len(result.FailedUserIDs) != 1 || result.FailedUserIDs[0] != 3 {
+		t.Fatalf("expected FailedUserIDs=[3], got %+v", result)
+	}
+	if len(result.FailedUserDetails) != 1 || result.FailedUserDetails[0].ErrorCode != "add.participant.privacy" {
+		t.Errorf("unexpected FailedUserDetails: %+v", result.FailedUserDetails)
 	}
 }
 

@@ -2,6 +2,7 @@ package maxbot
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -42,6 +43,10 @@ func (b *Bot) GetChats(count int, marker *int64) ([]Chat, *int64, error) {
 }
 
 // GetChatByLink retrieves chat information by its public link (e.g. "mygroup").
+//
+// Deprecated: the live MAX Bot API spec (0.0.33) only declares
+// /chats/{chatId} with an integer chatId; a link-based path is
+// undocumented and left over from the older 0.0.10 schema.
 func (b *Bot) GetChatByLink(link string) (*Chat, error) {
 	data, err := b.Raw("GET", "/chats/"+link, nil)
 	if err != nil {
@@ -88,10 +93,12 @@ func (b *Bot) UpdateChat(chatID int64, fields map[string]interface{}) (*Chat, er
 }
 
 // DeleteChat removes a group chat.
+//
+// Deprecated: the live MAX Bot API spec (0.0.33) only declares get/patch
+// operations on /chats/{chatId}; delete is undocumented and may not work.
 func (b *Bot) DeleteChat(chatID int64) error {
 	url := fmt.Sprintf("/chats/%d", chatID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // GetChatMemberMe returns the bot's own membership info in the chat.
@@ -193,39 +200,48 @@ func (b *Bot) GetChatAdmins(chatID int64) ([]ChatMember, *int64, error) {
 	return response.Members, response.Marker, nil
 }
 
+// defaultAdminPermissions are granted by PromoteChatMember when no
+// permissions are explicitly requested. It excludes view_stats (not part of
+// the ChatAdminPermission enum -- an owner-only capability the request would
+// reject) and can_call (assigned automatically by MAX; explicit grants have
+// no effect and it is unavailable in channels).
+var defaultAdminPermissions = []ChatAdminPermission{
+	PermReadAllMessages,
+	PermAddRemoveMembers,
+	PermAddAdmins,
+	PermChangeChatInfo,
+	PermPinMessage,
+	PermWrite,
+}
+
 // PromoteChatMember grants admin rights to a user.
-// perms lists the permissions to grant; if empty, all permissions are granted.
+// perms lists the permissions to grant; if empty, defaultAdminPermissions are granted.
 func (b *Bot) PromoteChatMember(chatID, userID int64, perms ...ChatAdminPermission) error {
+	return b.PromoteChatMemberWithAlias(chatID, userID, "", perms...)
+}
+
+// PromoteChatMemberWithAlias grants admin rights to a user, optionally
+// labeling the role with a custom alias shown in the chat UI (ChatAdmin.alias).
+// perms lists the permissions to grant; if empty, defaultAdminPermissions are granted.
+func (b *Bot) PromoteChatMemberWithAlias(chatID, userID int64, alias string, perms ...ChatAdminPermission) error {
 	if len(perms) == 0 {
-		perms = []ChatAdminPermission{
-			PermReadAllMessages,
-			PermAddRemoveMembers,
-			PermAddAdmins,
-			PermChangeChatInfo,
-			PermPinMessage,
-			PermEditLink,
-			PermWrite,
-			PermEdit,
-			PermDelete,
-			PermCanCall,
-			PermViewStats,
-		}
+		perms = defaultAdminPermissions
+	}
+	admin := map[string]interface{}{"user_id": userID, "permissions": perms}
+	if alias != "" {
+		admin["alias"] = alias
 	}
 	endpoint := fmt.Sprintf("/chats/%d/members/admins", chatID)
 	payload := map[string]interface{}{
-		"admins": []map[string]interface{}{
-			{"user_id": userID, "permissions": perms},
-		},
+		"admins": []map[string]interface{}{admin},
 	}
-	_, err := b.Raw("POST", endpoint, payload)
-	return err
+	return b.rawSimple("POST", endpoint, payload)
 }
 
 // DemoteChatMember removes administrator rights from a user.
 func (b *Bot) DemoteChatMember(chatID int64, userID int64) error {
 	url := fmt.Sprintf("/chats/%d/members/admins/%d", chatID, userID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // KickChatMember removes a user from the chat.
@@ -235,26 +251,36 @@ func (b *Bot) KickChatMember(chatID, userID int64, block bool) error {
 	if block {
 		endpoint += "&block=true"
 	}
-	_, err := b.Raw("DELETE", endpoint, nil)
-	return err
+	return b.rawSimple("DELETE", endpoint, nil)
 }
 
-// InviteChatMembers adds users to the chat.
-func (b *Bot) InviteChatMembers(chatID int64, userIDs []int64) error {
+// InviteChatMembers adds users to the chat. The result reports success as a
+// whole and, if MAX could add only some of userIDs, which ones failed and
+// why -- a bare error would look like full success or full failure.
+func (b *Bot) InviteChatMembers(chatID int64, userIDs []int64) (*ModifyMembersResult, error) {
 	url := fmt.Sprintf("/chats/%d/members", chatID)
 	payload := map[string]interface{}{
 		"user_ids": userIDs,
 	}
 
-	_, err := b.Raw("POST", url, payload)
-	return err
+	data, err := b.Raw("POST", url, payload)
+	if err != nil {
+		return nil, err
+	}
+	var result ModifyMembersResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	if !result.Success {
+		return &result, errors.New(result.Message)
+	}
+	return &result, nil
 }
 
 // LeaveChat makes the bot leave the chat.
 func (b *Bot) LeaveChat(chatID int64) error {
 	url := fmt.Sprintf("/chats/%d/members/me", chatID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // PinMessage pins a message in the chat.
@@ -267,15 +293,13 @@ func (b *Bot) PinMessage(chatID int64, messageID string, notify *bool) error {
 	if notify != nil {
 		payload["notify"] = *notify
 	}
-	_, err := b.Raw("PUT", endpoint, payload)
-	return err
+	return b.rawSimple("PUT", endpoint, payload)
 }
 
 // UnpinMessage unpins the pinned message.
 func (b *Bot) UnpinMessage(chatID int64) error {
 	url := fmt.Sprintf("/chats/%d/pin", chatID)
-	_, err := b.Raw("DELETE", url, nil)
-	return err
+	return b.rawSimple("DELETE", url, nil)
 }
 
 // GetPinnedMessage retrieves the pinned message.
@@ -304,6 +328,5 @@ func (b *Bot) SendChatAction(chatID int64, action ChatAction) error {
 		"action": string(action),
 	}
 
-	_, err := b.Raw("POST", url, payload)
-	return err
+	return b.rawSimple("POST", url, payload)
 }

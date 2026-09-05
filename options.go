@@ -6,12 +6,35 @@ type SendOptions struct {
 	Format      string
 	Attachments []Attachment
 	ReplyToMid  string // mid of message to reply to
+
+	// Notify controls whether chat members get a push notification for this
+	// message. nil uses the server default (true); for channels the API
+	// requires true (or the field omitted) -- posts are always notified.
+	Notify *bool
+
+	// DisableLinkPreview suppresses link preview generation for the message
+	// text. Only honored by Bot.Send (POST /messages) and Context.Respond
+	// (POST /answers); PUT /messages (Bot.Edit) has no such query parameter.
+	DisableLinkPreview bool
 }
 
-// CallbackResponse represents a response to a callback query.
-// Text is the notification toast shown to the user.
+// CallbackResponse represents a response to a callback query (POST /answers).
 type CallbackResponse struct {
+	// Text sends a one-time toast notification to the user. This maps to
+	// the "notification" field, which the live spec (0.0.33) no longer
+	// documents on CallbackAnswer -- kept for compatibility since the
+	// server still appears to accept it.
 	Text string
+
+	// Message, if set, replaces the message the pressed button was on
+	// (CallbackAnswer.message, a NewMessageBody). Text/Format/Attachments/
+	// ReplyToMid/Notify are honored the same way as in Bot.Edit; build
+	// Attachments the same way Send does for a keyboard (an
+	// "inline_keyboard" Attachment) to redraw the button row.
+	Message *SendOptions
+
+	// DisableLinkPreview suppresses link preview generation for Message's text.
+	DisableLinkPreview bool
 }
 
 // Attachment represents a message attachment (keyboard, file, etc).
@@ -31,12 +54,14 @@ type Attachment struct {
 // SendMessage represents an outgoing message request.
 // Exactly one of UserID or ChatID must be set.
 type SendMessage struct {
-	UserID      string       // recipient user ID (private chats)
-	ChatID      string       // recipient chat/channel ID
-	Text        string       `json:"text"`
-	Format      string       `json:"format,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	Link        *linkedRef   `json:"link,omitempty"`
+	UserID             string       // recipient user ID (private chats)
+	ChatID             string       // recipient chat/channel ID
+	Text               string       `json:"text"`
+	Format             string       `json:"format,omitempty"`
+	Attachments        []Attachment `json:"attachments,omitempty"`
+	Link               *linkedRef   `json:"link,omitempty"`
+	Notify             *bool        `json:"notify,omitempty"`
+	DisableLinkPreview bool         // sent as a query param, not a body field
 }
 
 // linkedRef is used to attach a reply/forward link to an outgoing message.
@@ -47,10 +72,13 @@ type linkedRef struct {
 
 // EditMessage represents a message edit request.
 type EditMessage struct {
-	MessageID string `json:"message_id"` // MAX message mid
-	ChatID    int64  `json:"chat_id"`
-	Text      string `json:"text"`
-	Format    string `json:"format,omitempty"`
+	MessageID   string       `json:"message_id"` // MAX message mid
+	ChatID      int64        `json:"chat_id"`
+	Text        string       `json:"text"`
+	Format      string       `json:"format,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	Link        *linkedRef   `json:"link,omitempty"`
+	Notify      *bool        `json:"notify,omitempty"`
 }
 
 // buildSendOptions aggregates every recognized option (*SendOptions,
@@ -69,6 +97,10 @@ func buildSendOptions(opts []interface{}) *SendOptions {
 			if v.ReplyToMid != "" {
 				o.ReplyToMid = v.ReplyToMid
 			}
+			if v.Notify != nil {
+				o.Notify = v.Notify
+			}
+			o.DisableLinkPreview = v.DisableLinkPreview
 		case *ReplyMarkup:
 			if len(v.InlineKeyboard) > 0 {
 				o.Attachments = append(o.Attachments, Attachment{

@@ -14,14 +14,6 @@ import (
 
 const maxRetries = 4
 
-// addVersionParam appends v=APIVersion to a path that may already have query params.
-func addVersionParam(path string) string {
-	if strings.Contains(path, "?") {
-		return path + "&v=" + APIVersion
-	}
-	return path + "?v=" + APIVersion
-}
-
 // sendMessage sends a message via MAX API, retrying on attachment-not-ready errors.
 func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	var recipientParam string
@@ -30,7 +22,10 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	} else {
 		recipientParam = "user_id=" + msg.UserID
 	}
-	url := fmt.Sprintf("%s%s", b.URL, addVersionParam("/messages?"+recipientParam))
+	if msg.DisableLinkPreview {
+		recipientParam += "&disable_link_preview=true"
+	}
+	url := fmt.Sprintf("%s/messages?%s", b.URL, recipientParam)
 
 	// NewMessageBody requires text/attachments/link to be present (each is
 	// nullable, but the key itself is required) -- always include them.
@@ -41,6 +36,9 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	}
 	if msg.Format != "" {
 		body["format"] = msg.Format
+	}
+	if msg.Notify != nil {
+		body["notify"] = *msg.Notify
 	}
 
 	var lastErr error
@@ -94,14 +92,16 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 }
 
 // editMessageByMid edits a message using MAX message ID (mid), retrying on attachment-not-ready errors.
-func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}) error {
+// sendOpts carries the aggregated Format/Attachments/ReplyToMid to apply; nil means text-only.
+func (b *Bot) editMessageByMid(mid string, what interface{}, sendOpts *SendOptions) error {
 	if mid == "" {
 		return fmt.Errorf("message mid is empty")
 	}
 
 	// NewMessageBody requires attachments/link to be present (nullable);
-	// nil here means "leave attachments/link unchanged", per the API's own
-	// edit semantics -- exactly what a text-only edit intends.
+	// nil means "leave attachments/link unchanged" per the API's edit
+	// semantics -- unless the caller explicitly passed attachments/a
+	// keyboard/a reply link, which must replace them.
 	body := map[string]interface{}{
 		"attachments": nil,
 		"link":        nil,
@@ -112,13 +112,22 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 	default:
 		return fmt.Errorf("unsupported editable type: %T", what)
 	}
-	for _, opt := range opts {
-		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
-			body["format"] = o.Format
+	if sendOpts != nil {
+		if sendOpts.Format != "" {
+			body["format"] = sendOpts.Format
+		}
+		if len(sendOpts.Attachments) > 0 {
+			body["attachments"] = sendOpts.Attachments
+		}
+		if sendOpts.ReplyToMid != "" {
+			body["link"] = &linkedRef{Type: "reply", Mid: sendOpts.ReplyToMid}
+		}
+		if sendOpts.Notify != nil {
+			body["notify"] = *sendOpts.Notify
 		}
 	}
 
-	url := fmt.Sprintf("%s%s", b.URL, addVersionParam(fmt.Sprintf("/messages?message_id=%s", mid)))
+	url := fmt.Sprintf("%s/messages?message_id=%s", b.URL, mid)
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -175,7 +184,8 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, opts ...interface{}
 func (b *Bot) editMessage(edit *EditMessage) error {
 	path := "/messages?message_id=" + edit.MessageID
 	// NewMessageBody requires attachments/link to be present (nullable);
-	// nil means "leave unchanged", matching this text-only edit.
+	// nil means "leave unchanged" unless the caller supplied attachments/a
+	// keyboard/a reply link, which must replace them.
 	body := map[string]interface{}{
 		"text":        edit.Text,
 		"attachments": nil,
@@ -184,25 +194,21 @@ func (b *Bot) editMessage(edit *EditMessage) error {
 	if edit.Format != "" {
 		body["format"] = edit.Format
 	}
-	data, err := b.Raw("PUT", path, body)
-	if err != nil {
-		return err
+	if edit.Notify != nil {
+		body["notify"] = *edit.Notify
 	}
-
-	var result SimpleQueryResult
-	if err := json.Unmarshal(data, &result); err != nil {
-		return err
+	if len(edit.Attachments) > 0 {
+		body["attachments"] = edit.Attachments
 	}
-	if !result.Success {
-		return errors.New(result.Message)
+	if edit.Link != nil {
+		body["link"] = edit.Link
 	}
-	return nil
+	return b.rawSimple("PUT", path, body)
 }
 
 // deleteMessage deletes a message via API using its string mid.
 func (b *Bot) deleteMessage(mid string) error {
-	_, err := b.Raw("DELETE", "/messages?message_id="+mid, nil)
-	return err
+	return b.rawSimple("DELETE", "/messages?message_id="+mid, nil)
 }
 
 // getUpdates retrieves updates via long polling.
@@ -217,7 +223,7 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) 
 	if len(types) > 0 {
 		path += "&types=" + strings.Join(types, ",")
 	}
-	url := b.URL + addVersionParam(path)
+	url := b.URL + path
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -260,12 +266,37 @@ func (b *Bot) getUpdates(marker *int64, limit int, timeout int, types []string) 
 // respondCallback responds to a callback query.
 // callback_id is sent as a query parameter per the MAX API spec.
 func (b *Bot) respondCallback(callbackID string, resp *CallbackResponse) error {
+	path := "/answers?callback_id=" + callbackID
+
 	body := map[string]interface{}{}
-	if resp != nil && resp.Text != "" {
-		body["notification"] = resp.Text
+	if resp != nil {
+		if resp.Text != "" {
+			body["notification"] = resp.Text
+		}
+		if resp.Message != nil {
+			m := resp.Message
+			msgBody := map[string]interface{}{
+				"text":        m.Text,
+				"attachments": m.Attachments,
+				"link":        nil,
+			}
+			if m.Format != "" {
+				msgBody["format"] = m.Format
+			}
+			if m.ReplyToMid != "" {
+				msgBody["link"] = &linkedRef{Type: "reply", Mid: m.ReplyToMid}
+			}
+			if m.Notify != nil {
+				msgBody["notify"] = *m.Notify
+			}
+			body["message"] = msgBody
+		}
+		if resp.DisableLinkPreview {
+			path += "&disable_link_preview=true"
+		}
 	}
-	_, err := b.Raw("POST", "/answers?callback_id="+callbackID, body)
-	return err
+
+	return b.rawSimple("POST", path, body)
 }
 
 // Me returns information about the bot.
@@ -291,14 +322,21 @@ type BotPatch struct {
 	// FirstName; kept for compatibility with existing callers.
 	Name        string `json:"name,omitempty"`
 	FirstName   string `json:"first_name,omitempty"`
+	LastName    string `json:"last_name,omitempty"`
 	Description string `json:"description,omitempty"`
 	// Commands replaces the bot's command list. Pass an empty (non-nil)
 	// slice to remove all commands; prefer SetCommands/DeleteCommands,
 	// which use the dedicated PATCH /me/commands endpoint instead.
 	Commands []BotCommand `json:"commands,omitempty"`
+	// Photo sets the bot's avatar.
+	Photo *PhotoAttachmentRequestPayload `json:"photo,omitempty"`
 }
 
 // PatchBot updates bot properties via PATCH /me.
+//
+// Deprecated: the live MAX Bot API spec (0.0.33) only declares a get
+// operation on /me; PATCH /me is undocumented (only the dedicated
+// PATCH /me/commands is, see SetCommands) and may not work.
 func (b *Bot) PatchBot(patch BotPatch) (*User, error) {
 	data, err := b.Raw("PATCH", "/me", patch)
 	if err != nil {
@@ -320,6 +358,9 @@ func (b *Bot) SetCommands(commands []BotCommand) error {
 	payload := map[string]interface{}{
 		"commands": commands,
 	}
+	// PATCH /me/commands returns BotCommandsInfo (the resulting command
+	// list), not a SimpleQueryResult -- failures surface as non-200 status
+	// codes, which Raw already turns into an error.
 	_, err := b.Raw("PATCH", "/me/commands", payload)
 	return err
 }
@@ -463,8 +504,11 @@ func buildMultipart(fileName string, data []byte) (*bytes.Buffer, string, error)
 	return buf, w.FormDataContentType(), nil
 }
 
-// GetMessages retrieves messages in a chat.
-// from/to are optional timestamp boundaries (pass 0 to omit); count limits results.
+// GetMessages retrieves messages (or channel posts) in a chat by time range.
+// from/to are optional Unix-ms timestamp boundaries (pass 0 to omit); per
+// spec from is the upper time bound and to is the lower one -- i.e. results
+// walk backward from from down to to, so to is normally less than from, not
+// the other way round. count limits results (0 = server default, max 100).
 // The returned marker may always be nil: MAX's own MessageList response
 // schema declares only "messages", even though the endpoint's own
 // description mentions marker-based pagination -- this passes it through
@@ -480,7 +524,20 @@ func (b *Bot) GetMessages(chatID int64, count int, from, to int64) ([]Message, *
 	if to > 0 {
 		path += fmt.Sprintf("&to=%d", to)
 	}
+	return b.getMessages(path)
+}
 
+// GetMessagesByIDs retrieves specific messages (or channel posts) by mid,
+// using the message_ids query parameter -- the other way to satisfy GET
+// /messages's "chat_id or message_ids" requirement, for when the chat isn't
+// known or messages span more than one chat.
+func (b *Bot) GetMessagesByIDs(messageIDs []string) ([]Message, error) {
+	path := "/messages?message_ids=" + strings.Join(messageIDs, ",")
+	messages, _, err := b.getMessages(path)
+	return messages, err
+}
+
+func (b *Bot) getMessages(path string) ([]Message, *int64, error) {
 	data, err := b.Raw("GET", path, nil)
 	if err != nil {
 		return nil, nil, err
@@ -513,23 +570,42 @@ func (b *Bot) GetMessage(mid string) (*Message, error) {
 }
 
 // GetVideoInfo returns video metadata by its token.
-func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
+func (b *Bot) GetVideoInfo(videoToken string) (*VideoAttachmentDetails, error) {
 	data, err := b.Raw("GET", "/videos/"+videoToken, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var result map[string]interface{}
+	var result VideoAttachmentDetails
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	return &result, nil
+}
+
+// rawSimple performs a request whose response body is a SimpleQueryResult
+// (or an extension of it, like ModifyMembersResult) and turns a 200 OK
+// {"success": false} response into an error -- the MAX API reports failures
+// like "not found" or "no permission" this way instead of via HTTP status.
+func (b *Bot) rawSimple(method, endpoint string, payload interface{}) error {
+	data, err := b.Raw(method, endpoint, payload)
+	if err != nil {
+		return err
+	}
+	var result SimpleQueryResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return errors.New(result.Message)
+	}
+	return nil
 }
 
 // Raw makes a raw API request.
 func (b *Bot) Raw(method, endpoint string, payload interface{}) ([]byte, error) {
-	url := b.URL + addVersionParam(endpoint)
+	url := b.URL + endpoint
 
 	var body io.Reader
 	if payload != nil {

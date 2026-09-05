@@ -26,7 +26,7 @@ func TestGetCommentsBuildsQuery(t *testing.T) {
 	if gotPath != "/messages/mid.post1/comments" {
 		t.Errorf("expected path /messages/mid.post1/comments, got %q", gotPath)
 	}
-	if gotQuery != "comment_ids=mid.c1,mid.c2&after=100&before=200&count=10&v="+APIVersion {
+	if gotQuery != "comment_ids=mid.c1,mid.c2&after=100&before=200&count=10" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(comments) != 1 || comments[0].Text() != "hi" {
@@ -113,6 +113,27 @@ func TestPostCommentUnwrapsEnvelope(t *testing.T) {
 	}
 }
 
+// C11: PostCommentReply must send a "reply" link so a comment can target
+// another comment, not just the post itself.
+func TestPostCommentReplyIncludesLink(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": map[string]interface{}{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.c2", "text": "reply"}},
+		})
+	}))
+
+	if _, err := b.PostCommentReply("mid.post1", "reply", "", "mid.c1"); err != nil {
+		t.Fatalf("PostCommentReply error: %v", err)
+	}
+	link, ok := gotBody["link"].(map[string]interface{})
+	if !ok || link["type"] != "reply" || link["mid"] != "mid.c1" {
+		t.Errorf("expected link={type:reply, mid:mid.c1}, got %+v", gotBody["link"])
+	}
+}
+
 func TestEditCommentQueryAndFailure(t *testing.T) {
 	var gotQuery string
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +146,7 @@ func TestEditCommentQueryAndFailure(t *testing.T) {
 	if err == nil || err.Error() != "not allowed" {
 		t.Fatalf("expected 'not allowed' error, got %v", err)
 	}
-	if gotQuery != "comment_id=mid.c1&v="+APIVersion {
+	if gotQuery != "comment_id=mid.c1" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 }
@@ -146,7 +167,7 @@ func TestDeleteCommentQuery(t *testing.T) {
 	if gotMethod != http.MethodDelete || gotPath != "/messages/mid.post1/comments" {
 		t.Errorf("expected DELETE /messages/mid.post1/comments, got %s %s", gotMethod, gotPath)
 	}
-	if gotQuery != "comment_id=mid.c1&v="+APIVersion {
+	if gotQuery != "comment_id=mid.c1" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 }

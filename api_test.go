@@ -3,10 +3,10 @@ package maxbot
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -71,6 +71,31 @@ func TestSendMessageAlwaysIncludesRequiredKeys(t *testing.T) {
 	}
 }
 
+// B3: Send() must forward SendOptions.Notify into the body and
+// DisableLinkPreview into the query string.
+func TestSendHonorsNotifyAndDisableLinkPreview(t *testing.T) {
+	var gotBody map[string]interface{}
+	var gotQuery string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"message": map[string]interface{}{}})
+	}))
+
+	notify := false
+	opts := &SendOptions{Notify: &notify, DisableLinkPreview: true}
+	if _, err := b.Send(&Chat{ID: 1}, "hi", opts); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if gotBody["notify"] != false {
+		t.Errorf("expected notify=false in body, got %+v", gotBody["notify"])
+	}
+	if !strings.Contains(gotQuery, "disable_link_preview=true") {
+		t.Errorf("expected disable_link_preview=true in query, got %q", gotQuery)
+	}
+}
+
 // TASK-1: editMessageByMid must return nil on success:true.
 func TestEditMessageByMidSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -109,11 +134,60 @@ func TestEditMessageByMidIncludesNullAttachmentsAndLink(t *testing.T) {
 	}
 }
 
-// TASK-11: all requests include v= query param.
-func TestRequestsIncludeAPIVersion(t *testing.T) {
-	var gotV string
+// A2: Edit() must forward a *ReplyMarkup into the edit body's attachments
+// instead of silently dropping it (previously "attachments": null always
+// went out, wiping any existing keyboard and ignoring the new one).
+func TestEditByMidIncludesKeyboard(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	markup := &ReplyMarkup{}
+	markup.Row(markup.Data("Yes", "yes"))
+	msg := &Message{Body: &MessageBody{Mid: "mid.abc"}}
+	if err := b.Edit(msg, "new text", markup); err != nil {
+		t.Fatalf("Edit error: %v", err)
+	}
+	attachments, ok := gotBody["attachments"].([]interface{})
+	if !ok || len(attachments) != 1 {
+		t.Fatalf("expected 1 attachment carrying the keyboard, got %+v", gotBody["attachments"])
+	}
+	att, _ := attachments[0].(map[string]interface{})
+	if att["type"] != "inline_keyboard" {
+		t.Errorf("expected inline_keyboard attachment, got %+v", att)
+	}
+}
+
+// Same fix for the StoredMessage (message_id/chat_id) edit path.
+func TestEditStoredMessageIncludesKeyboard(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	markup := &ReplyMarkup{}
+	markup.Row(markup.Data("Yes", "yes"))
+	sm := &StoredMessage{MessageID: "mid.5", ChatID: 42}
+	if err := b.Edit(sm, "new text", markup); err != nil {
+		t.Fatalf("Edit error: %v", err)
+	}
+	attachments, ok := gotBody["attachments"].([]interface{})
+	if !ok || len(attachments) != 1 {
+		t.Fatalf("expected 1 attachment carrying the keyboard, got %+v", gotBody["attachments"])
+	}
+}
+
+// Requests must not carry an undocumented v= query param: it does not exist
+// in the live MAX Bot API spec (0.0.33) and MAX's own reference client treats
+// it as a no-op.
+func TestRequestsOmitAPIVersion(t *testing.T) {
+	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotV = r.URL.Query().Get("v")
+		gotQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"message": map[string]interface{}{
@@ -125,8 +199,8 @@ func TestRequestsIncludeAPIVersion(t *testing.T) {
 
 	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
 	b.Send(&Chat{ID: 1}, "hi")
-	if gotV != APIVersion {
-		t.Errorf("expected v=%s in request, got %q", APIVersion, gotV)
+	if strings.Contains(gotQuery, "v=") {
+		t.Errorf("expected no v= query param, got query %q", gotQuery)
 	}
 }
 
@@ -154,6 +228,26 @@ func TestMessageLinkParsed(t *testing.T) {
 	}
 	if msg.ReplyTo.Text() != "original" {
 		t.Errorf("expected ReplyTo text 'original', got %q", msg.ReplyTo.Text())
+	}
+}
+
+// C1: a channel post's stat/url must not be dropped.
+func TestMessageStatAndURLParsed(t *testing.T) {
+	raw := `{
+		"timestamp": 1700000000,
+		"body": {"mid": "mid.1", "seq": 1, "text": "a post"},
+		"stat": {"views": 42},
+		"url": "https://max.ru/channel/post/1"
+	}`
+	var msg Message
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if msg.Stat == nil || msg.Stat.Views != 42 {
+		t.Errorf("expected stat.views=42, got %+v", msg.Stat)
+	}
+	if msg.URL != "https://max.ru/channel/post/1" {
+		t.Errorf("expected url, got %q", msg.URL)
 	}
 }
 
@@ -330,7 +424,7 @@ func TestEditStoredMessage(t *testing.T) {
 	if err := b.Edit(sm, "updated text"); err != nil {
 		t.Fatalf("Edit error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.5&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.5" {
 		t.Errorf("expected path /messages?message_id=mid.5, got %q", gotPath)
 	}
 	if gotBody["text"] != "updated text" {
@@ -384,7 +478,7 @@ func TestDeleteStoredMessage(t *testing.T) {
 	if err := b.Delete(sm); err != nil {
 		t.Fatalf("Delete error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.7&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.7" {
 		t.Errorf("expected path /messages?message_id=mid.7, got %q", gotPath)
 	}
 }
@@ -416,7 +510,7 @@ func TestGetUpdatesBuildsQueryAndParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getUpdates error: %v", err)
 	}
-	if gotQuery != fmt.Sprintf("timeout=30&limit=5&marker=10&types=message_created,bot_started&v=%s", APIVersion) {
+	if gotQuery != "timeout=30&limit=5&marker=10&types=message_created,bot_started" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(updates) != 1 || updates[0].UpdateType != "message_created" {
@@ -451,6 +545,32 @@ func TestMe(t *testing.T) {
 	}
 	if user.Name != "Bot" {
 		t.Errorf("expected name=Bot, got %q", user.Name)
+	}
+}
+
+// C5: GET /me returns BotInfo (description + commands), which Me() must not
+// silently drop.
+func TestMeParsesDescriptionAndCommands(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"user_id":     1,
+			"name":        "Bot",
+			"description": "A helpful bot",
+			"commands": []map[string]interface{}{
+				{"name": "start", "description": "Start the bot"},
+			},
+		})
+	}))
+	user, err := b.Me()
+	if err != nil {
+		t.Fatalf("Me error: %v", err)
+	}
+	if user.Description != "A helpful bot" {
+		t.Errorf("expected description, got %q", user.Description)
+	}
+	if len(user.Commands) != 1 || user.Commands[0].Name != "start" {
+		t.Errorf("expected 1 command 'start', got %+v", user.Commands)
 	}
 }
 
@@ -555,10 +675,36 @@ func TestGetMessagesBuildsQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMessages error: %v", err)
 	}
-	if gotQuery != fmt.Sprintf("chat_id=42&count=10&from=100&to=200&v=%s", APIVersion) {
+	if gotQuery != "chat_id=42&count=10&from=100&to=200" {
 		t.Errorf("unexpected query: %q", gotQuery)
 	}
 	if len(msgs) != 1 || msgs[0].Text() != "hi" {
+		t.Fatalf("unexpected messages: %+v", msgs)
+	}
+}
+
+// B4: GetMessagesByIDs must use message_ids, the other valid way to satisfy
+// GET /messages's "chat_id or message_ids" requirement.
+func TestGetMessagesByIDsBuildsQuery(t *testing.T) {
+	var gotQuery string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"messages": []map[string]interface{}{
+				{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.1", "text": "hi"}},
+				{"timestamp": 2, "body": map[string]interface{}{"mid": "mid.2", "text": "there"}},
+			},
+		})
+	}))
+	msgs, err := b.GetMessagesByIDs([]string{"mid.1", "mid.2"})
+	if err != nil {
+		t.Fatalf("GetMessagesByIDs error: %v", err)
+	}
+	if gotQuery != "message_ids=mid.1,mid.2" {
+		t.Errorf("unexpected query: %q", gotQuery)
+	}
+	if len(msgs) != 2 {
 		t.Fatalf("unexpected messages: %+v", msgs)
 	}
 }
@@ -583,20 +729,28 @@ func TestGetMessage(t *testing.T) {
 	}
 }
 
+// C9: GetVideoInfo must parse into a typed VideoAttachmentDetails instead
+// of a bare map, so urls/thumbnail are usable without manual type-asserting.
 func TestGetVideoInfo(t *testing.T) {
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/videos/tok123" {
 			t.Errorf("expected path /videos/tok123, got %q", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"width": 1920, "height": 1080})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"token": "tok123", "width": 1920, "height": 1080, "duration": 30,
+			"urls": map[string]interface{}{"mp4_1080": "https://example.com/1080.mp4", "hls": "https://example.com/stream.m3u8"},
+		})
 	}))
 	info, err := b.GetVideoInfo("tok123")
 	if err != nil {
 		t.Fatalf("GetVideoInfo error: %v", err)
 	}
-	if info["width"] != float64(1920) {
-		t.Errorf("expected width=1920, got %v", info["width"])
+	if info.Width != 1920 || info.Height != 1080 {
+		t.Errorf("expected 1920x1080, got %dx%d", info.Width, info.Height)
+	}
+	if info.URLs == nil || info.URLs.MP4_1080 != "https://example.com/1080.mp4" || info.URLs.HLS != "https://example.com/stream.m3u8" {
+		t.Errorf("unexpected urls: %+v", info.URLs)
 	}
 }
 

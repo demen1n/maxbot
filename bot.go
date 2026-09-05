@@ -11,7 +11,6 @@ import (
 const (
 	DefaultAPIURL  = "https://platform-api2.max.ru"
 	DefaultTimeout = 10 * time.Second
-	APIVersion     = "1.2.5"
 )
 
 // Common endpoint constants for message routing.
@@ -36,7 +35,17 @@ const (
 	OnChatTitleChanged   = "\achat_title_changed"
 	OnDialogRemoved      = "\adialog_removed"
 	OnDialogCleared      = "\adialog_cleared"
+	OnDialogMuted        = "\adialog_muted"
+	OnDialogUnmuted      = "\adialog_unmuted"
 	OnMessageChatCreated = "\amessage_chat_created" // Chat button completed: new chat was created
+
+	// Comment events on channel posts (Comments API). These are routed
+	// before the generic message branch in match() -- a comment_created/
+	// comment_edited update carries a Message just like a regular chat
+	// message, but must never reach OnText/OnMessage/command handlers.
+	OnCommentCreated = "\acomment_created"
+	OnCommentEdited  = "\acomment_edited"
+	OnCommentRemoved = "\acomment_removed"
 )
 
 // Bot represents a MAX bot instance.
@@ -176,6 +185,18 @@ func (b *Bot) match(u Update) HandlerFunc {
 		return nil
 	}
 
+	// Comment events on channel posts carry a Message field just like
+	// message_created/message_edited, but must be routed here -- before the
+	// generic message branch below -- or a channel subscriber's comment
+	// would be delivered to OnText/OnMessage/command handlers meant for
+	// ordinary chat messages.
+	switch u.UpdateType {
+	case UpdateCommentCreated:
+		return b.handlers[OnCommentCreated]
+	case UpdateCommentEdited:
+		return b.handlers[OnCommentEdited]
+	}
+
 	// Message updates (message_created, message_edited).
 	if u.Message != nil {
 		// Edited messages get their own handler first.
@@ -242,6 +263,12 @@ func (b *Bot) match(u Update) HandlerFunc {
 		endpointKey = OnDialogRemoved
 	case UpdateDialogCleared:
 		endpointKey = OnDialogCleared
+	case UpdateDialogMuted:
+		endpointKey = OnDialogMuted
+	case UpdateDialogUnmuted:
+		endpointKey = OnDialogUnmuted
+	case UpdateCommentRemoved:
+		endpointKey = OnCommentRemoved
 	case UpdateMessageChatCreated:
 		endpointKey = OnMessageChatCreated
 	}
@@ -297,6 +324,8 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 			if o.ReplyToMid != "" {
 				msg.Link = &linkedRef{Type: "reply", Mid: o.ReplyToMid}
 			}
+			msg.Notify = o.Notify
+			msg.DisableLinkPreview = o.DisableLinkPreview
 		case *ReplyMarkup:
 			if len(o.InlineKeyboard) > 0 {
 				msg.Attachments = append(msg.Attachments, Attachment{
@@ -322,17 +351,27 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 }
 
 // Edit edits an existing message.
-// For MAX API, uses message mid for editing.
+// For MAX API, uses message mid for editing. Any *ReplyMarkup/*ReplyKeyboard
+// passed in opts replaces the message's attachments, matching Send's
+// keyboard handling -- previously these were silently dropped.
 func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) error {
+	sendOpts := buildSendOptions(opts)
+
 	if m, ok := msg.(*Message); ok {
 		mid := m.Mid()
-		return b.editMessageByMid(mid, what, opts...)
+		return b.editMessageByMid(mid, what, sendOpts)
 	}
 
 	msgID, chatID := msg.MessageSig()
 	edit := &EditMessage{
-		MessageID: msgID,
-		ChatID:    chatID,
+		MessageID:   msgID,
+		ChatID:      chatID,
+		Format:      sendOpts.Format,
+		Attachments: sendOpts.Attachments,
+		Notify:      sendOpts.Notify,
+	}
+	if sendOpts.ReplyToMid != "" {
+		edit.Link = &linkedRef{Type: "reply", Mid: sendOpts.ReplyToMid}
 	}
 
 	switch v := what.(type) {
@@ -340,11 +379,6 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) error {
 		edit.Text = v
 	default:
 		return fmt.Errorf("unsupported editable type: %T", what)
-	}
-	for _, opt := range opts {
-		if o, ok := opt.(*SendOptions); ok && o.Format != "" {
-			edit.Format = o.Format
-		}
 	}
 
 	return b.editMessage(edit)

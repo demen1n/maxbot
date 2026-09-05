@@ -3,6 +3,7 @@ package maxbot
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -169,14 +170,14 @@ func TestContextEditAndDelete(t *testing.T) {
 	if err := c.Edit("new text"); err != nil {
 		t.Fatalf("Edit error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.9&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.9" {
 		t.Errorf("expected edit path, got %q", gotPath)
 	}
 
 	if err := c.Delete(); err != nil {
 		t.Fatalf("Delete error: %v", err)
 	}
-	if gotPath != "/messages?message_id=mid.9&v="+APIVersion {
+	if gotPath != "/messages?message_id=mid.9" {
 		t.Errorf("expected delete path, got %q", gotPath)
 	}
 }
@@ -214,6 +215,50 @@ func TestContextRespond(t *testing.T) {
 	// No opts -- still succeeds with an empty CallbackResponse.
 	if err := c.Respond(); err != nil {
 		t.Fatalf("Respond() with no opts error: %v", err)
+	}
+}
+
+// A1: Respond() must be able to change the message the button was on via
+// CallbackResponse.Message (previously the library could only send the
+// legacy "notification" toast, never a "message" body).
+func TestContextRespondWithMessage(t *testing.T) {
+	var gotBody map[string]interface{}
+	var gotQuery string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+
+	c := &nativeContext{b: b, update: Update{CallbackQuery: &CallbackQuery{CallbackID: "cb42"}}}
+	err := c.Respond(&CallbackResponse{
+		Message:            &SendOptions{Text: "updated"},
+		DisableLinkPreview: true,
+	})
+	if err != nil {
+		t.Fatalf("Respond error: %v", err)
+	}
+	msg, ok := gotBody["message"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected message field in body, got %+v", gotBody)
+	}
+	if msg["text"] != "updated" {
+		t.Errorf("expected message.text=updated, got %+v", msg["text"])
+	}
+	if !strings.Contains(gotQuery, "disable_link_preview=true") {
+		t.Errorf("expected disable_link_preview=true in query, got %q", gotQuery)
+	}
+}
+
+// Respond() must surface {"success": false} as an error instead of nil.
+func TestContextRespondFailure(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "message": "callback expired"})
+	}))
+
+	c := &nativeContext{b: b, update: Update{CallbackQuery: &CallbackQuery{CallbackID: "cb42"}}}
+	if err := c.Respond(&CallbackResponse{Text: "ok"}); err == nil {
+		t.Fatal("expected error for success:false response")
 	}
 }
 

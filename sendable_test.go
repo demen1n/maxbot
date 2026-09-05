@@ -44,6 +44,30 @@ func TestSendableHonorsReplyToMid(t *testing.T) {
 	}
 }
 
+// C12: sticker/contact must be rejected client-side when combined with any
+// other attachment (per spec they MUST be the only attachment); file may
+// only be combined with a single inline_keyboard attachment.
+func TestExclusivityConstraints(t *testing.T) {
+	markup := &ReplyMarkup{}
+	markup.Row(markup.Data("Yes", "yes"))
+
+	b, _ := captureAttachments(t)
+	if _, err := b.Send(&User{ID: 1}, &Sticker{Code: "smile"}, markup); err == nil {
+		t.Error("expected error combining sticker with a keyboard")
+	}
+	if _, err := b.Send(&User{ID: 1}, &Contact{Name: "Bob"}, markup); err == nil {
+		t.Error("expected error combining contact with a keyboard")
+	}
+	if _, err := b.Send(&User{ID: 1}, &Document{UploadedInfo: UploadedInfo{Token: "f"}}, markup); err != nil {
+		t.Errorf("expected file+inline_keyboard to be allowed, got %v", err)
+	}
+	if _, err := b.Send(&User{ID: 1}, &Document{UploadedInfo: UploadedInfo{Token: "f"}}, &SendOptions{
+		Attachments: []Attachment{{Type: "image", Payload: map[string]interface{}{"token": "x"}}},
+	}); err == nil {
+		t.Error("expected error combining file with a non-keyboard attachment")
+	}
+}
+
 func TestPhotoSendPayload(t *testing.T) {
 	b, got := captureAttachments(t)
 	p := &Photo{PhotoTokens: PhotoTokens{Photos: map[string]PhotoToken{"0": {Token: "photo-tok"}}}}
@@ -52,6 +76,28 @@ func TestPhotoSendPayload(t *testing.T) {
 	}
 	if len(*got) != 1 || (*got)[0].Type != "image" {
 		t.Fatalf("expected 1 image attachment, got %+v", *got)
+	}
+}
+
+// C10: Photo must also support the url/token attachment sources, not just
+// freshly uploaded photo tokens.
+func TestPhotoFromURLSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	if _, err := b.Send(&User{ID: 1}, PhotoFromURL("https://example.com/pic.jpg")); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Payload["url"] != "https://example.com/pic.jpg" {
+		t.Fatalf("expected image attachment with url payload, got %+v", *got)
+	}
+}
+
+func TestPhotoFromTokenSendPayload(t *testing.T) {
+	b, got := captureAttachments(t)
+	if _, err := b.Send(&User{ID: 1}, PhotoFromToken("reused-tok")); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if len(*got) != 1 || (*got)[0].Payload["token"] != "reused-tok" {
+		t.Fatalf("expected image attachment with token payload, got %+v", *got)
 	}
 }
 
