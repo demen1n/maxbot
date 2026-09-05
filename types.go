@@ -501,3 +501,33 @@ type UploadedInfo struct {
 	FileID int64  `json:"file_id,omitempty"`
 	Token  string `json:"token,omitempty"`
 }
+
+// PhotoAttachmentPayload identifies an already-attached image, as returned
+// e.g. as VideoAttachmentDetails.Thumbnail. URL is time-limited.
+type PhotoAttachmentPayload struct {
+	PhotoID int64  `json:"photo_id"`
+	Token   string `json:"token"`
+	URL     string `json:"url"`
+}
+
+// VideoURLs holds download/playback URLs for a video, one per resolution
+// (empty if that resolution isn't available) plus an HLS stream URL.
+type VideoURLs struct {
+	MP4_1080 string `json:"mp4_1080,omitempty"`
+	MP4_720  string `json:"mp4_720,omitempty"`
+	MP4_480  string `json:"mp4_480,omitempty"`
+	MP4_360  string `json:"mp4_360,omitempty"`
+	MP4_240  string `json:"mp4_240,omitempty"`
+	MP4_144  string `json:"mp4_144,omitempty"`
+	HLS      string `json:"hls,omitempty"`
+}
+
+// VideoAttachmentDetails is the response from GET /videos/{videoToken}.
+type VideoAttachmentDetails struct {
+	Token     string                  `json:"token"`
+	URLs      *VideoURLs              `json:"urls,omitempty"`
+	Thumbnail *PhotoAttachmentPayload `json:"thumbnail,omitempty"`
+	Width     int                     `json:"width"`
+	Height    int                     `json:"height"`
+	Duration  int                     `json:"duration"`
+}

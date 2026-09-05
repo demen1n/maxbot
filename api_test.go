@@ -729,20 +729,28 @@ func TestGetMessage(t *testing.T) {
 	}
 }
 
+// C9: GetVideoInfo must parse into a typed VideoAttachmentDetails instead
+// of a bare map, so urls/thumbnail are usable without manual type-asserting.
 func TestGetVideoInfo(t *testing.T) {
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/videos/tok123" {
 			t.Errorf("expected path /videos/tok123, got %q", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"width": 1920, "height": 1080})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"token": "tok123", "width": 1920, "height": 1080, "duration": 30,
+			"urls": map[string]interface{}{"mp4_1080": "https://example.com/1080.mp4", "hls": "https://example.com/stream.m3u8"},
+		})
 	}))
 	info, err := b.GetVideoInfo("tok123")
 	if err != nil {
 		t.Fatalf("GetVideoInfo error: %v", err)
 	}
-	if info["width"] != float64(1920) {
-		t.Errorf("expected width=1920, got %v", info["width"])
+	if info.Width != 1920 || info.Height != 1080 {
+		t.Errorf("expected 1920x1080, got %dx%d", info.Width, info.Height)
+	}
+	if info.URLs == nil || info.URLs.MP4_1080 != "https://example.com/1080.mp4" || info.URLs.HLS != "https://example.com/stream.m3u8" {
+		t.Errorf("unexpected urls: %+v", info.URLs)
 	}
 }
 

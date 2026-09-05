@@ -570,18 +570,18 @@ func (b *Bot) GetMessage(mid string) (*Message, error) {
 }
 
 // GetVideoInfo returns video metadata by its token.
-func (b *Bot) GetVideoInfo(videoToken string) (map[string]interface{}, error) {
+func (b *Bot) GetVideoInfo(videoToken string) (*VideoAttachmentDetails, error) {
 	data, err := b.Raw("GET", "/videos/"+videoToken, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var result map[string]interface{}
+	var result VideoAttachmentDetails
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	return &result, nil
 }
 
 // rawSimple performs a request whose response body is a SimpleQueryResult
