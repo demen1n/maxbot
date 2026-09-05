@@ -427,6 +427,15 @@ type PhotoTokens struct {
 	Photos map[string]PhotoToken `json:"photos"`
 }
 
+// PhotoAttachmentRequestPayload specifies an image to attach, either as a
+// remote URL, a reusable upload token, or freshly uploaded photo tokens.
+// The three fields are mutually exclusive.
+type PhotoAttachmentRequestPayload struct {
+	URL    string                `json:"url,omitempty"`
+	Token  string                `json:"token,omitempty"`
+	Photos map[string]PhotoToken `json:"photos,omitempty"`
+}
+
 // UploadedInfo is the response from an audio/video/file upload.
 type UploadedInfo struct {
 	FileID int64  `json:"file_id,omitempty"`

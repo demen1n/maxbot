@@ -322,14 +322,21 @@ type BotPatch struct {
 	// FirstName; kept for compatibility with existing callers.
 	Name        string `json:"name,omitempty"`
 	FirstName   string `json:"first_name,omitempty"`
+	LastName    string `json:"last_name,omitempty"`
 	Description string `json:"description,omitempty"`
 	// Commands replaces the bot's command list. Pass an empty (non-nil)
 	// slice to remove all commands; prefer SetCommands/DeleteCommands,
 	// which use the dedicated PATCH /me/commands endpoint instead.
 	Commands []BotCommand `json:"commands,omitempty"`
+	// Photo sets the bot's avatar.
+	Photo *PhotoAttachmentRequestPayload `json:"photo,omitempty"`
 }
 
 // PatchBot updates bot properties via PATCH /me.
+//
+// Deprecated: the live MAX Bot API spec (0.0.33) only declares a get
+// operation on /me; PATCH /me is undocumented (only the dedicated
+// PATCH /me/commands is, see SetCommands) and may not work.
 func (b *Bot) PatchBot(patch BotPatch) (*User, error) {
 	data, err := b.Raw("PATCH", "/me", patch)
 	if err != nil {

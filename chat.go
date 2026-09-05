@@ -42,6 +42,10 @@ func (b *Bot) GetChats(count int, marker *int64) ([]Chat, *int64, error) {
 }
 
 // GetChatByLink retrieves chat information by its public link (e.g. "mygroup").
+//
+// Deprecated: the live MAX Bot API spec (0.0.33) only declares
+// /chats/{chatId} with an integer chatId; a link-based path is
+// undocumented and left over from the older 0.0.10 schema.
 func (b *Bot) GetChatByLink(link string) (*Chat, error) {
 	data, err := b.Raw("GET", "/chats/"+link, nil)
 	if err != nil {
