@@ -296,6 +296,8 @@ func (b *Bot) Send(to Recipient, what interface{}, opts ...interface{}) (*Messag
 			if o.ReplyToMid != "" {
 				msg.Link = &linkedRef{Type: "reply", Mid: o.ReplyToMid}
 			}
+			msg.Notify = o.Notify
+			msg.DisableLinkPreview = o.DisableLinkPreview
 		case *ReplyMarkup:
 			if len(o.InlineKeyboard) > 0 {
 				msg.Attachments = append(msg.Attachments, Attachment{
@@ -338,6 +340,7 @@ func (b *Bot) Edit(msg Editable, what interface{}, opts ...interface{}) error {
 		ChatID:      chatID,
 		Format:      sendOpts.Format,
 		Attachments: sendOpts.Attachments,
+		Notify:      sendOpts.Notify,
 	}
 	if sendOpts.ReplyToMid != "" {
 		edit.Link = &linkedRef{Type: "reply", Mid: sendOpts.ReplyToMid}

@@ -14,6 +14,8 @@ func (b *Bot) sendAttachment(to Recipient, attachment Attachment, opts *SendOpti
 		if opts.ReplyToMid != "" {
 			msg.Link = &linkedRef{Type: "reply", Mid: opts.ReplyToMid}
 		}
+		msg.Notify = opts.Notify
+		msg.DisableLinkPreview = opts.DisableLinkPreview
 	}
 
 	return b.sendMessage(msg)

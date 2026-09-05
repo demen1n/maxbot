@@ -71,6 +71,31 @@ func TestSendMessageAlwaysIncludesRequiredKeys(t *testing.T) {
 	}
 }
 
+// B3: Send() must forward SendOptions.Notify into the body and
+// DisableLinkPreview into the query string.
+func TestSendHonorsNotifyAndDisableLinkPreview(t *testing.T) {
+	var gotBody map[string]interface{}
+	var gotQuery string
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"message": map[string]interface{}{}})
+	}))
+
+	notify := false
+	opts := &SendOptions{Notify: &notify, DisableLinkPreview: true}
+	if _, err := b.Send(&Chat{ID: 1}, "hi", opts); err != nil {
+		t.Fatalf("Send error: %v", err)
+	}
+	if gotBody["notify"] != false {
+		t.Errorf("expected notify=false in body, got %+v", gotBody["notify"])
+	}
+	if !strings.Contains(gotQuery, "disable_link_preview=true") {
+		t.Errorf("expected disable_link_preview=true in query, got %q", gotQuery)
+	}
+}
+
 // TASK-1: editMessageByMid must return nil on success:true.
 func TestEditMessageByMidSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

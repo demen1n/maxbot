@@ -22,6 +22,9 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	} else {
 		recipientParam = "user_id=" + msg.UserID
 	}
+	if msg.DisableLinkPreview {
+		recipientParam += "&disable_link_preview=true"
+	}
 	url := fmt.Sprintf("%s/messages?%s", b.URL, recipientParam)
 
 	// NewMessageBody requires text/attachments/link to be present (each is
@@ -33,6 +36,9 @@ func (b *Bot) sendMessage(msg *SendMessage) (*Message, error) {
 	}
 	if msg.Format != "" {
 		body["format"] = msg.Format
+	}
+	if msg.Notify != nil {
+		body["notify"] = *msg.Notify
 	}
 
 	var lastErr error
@@ -116,6 +122,9 @@ func (b *Bot) editMessageByMid(mid string, what interface{}, sendOpts *SendOptio
 		if sendOpts.ReplyToMid != "" {
 			body["link"] = &linkedRef{Type: "reply", Mid: sendOpts.ReplyToMid}
 		}
+		if sendOpts.Notify != nil {
+			body["notify"] = *sendOpts.Notify
+		}
 	}
 
 	url := fmt.Sprintf("%s/messages?message_id=%s", b.URL, mid)
@@ -184,6 +193,9 @@ func (b *Bot) editMessage(edit *EditMessage) error {
 	}
 	if edit.Format != "" {
 		body["format"] = edit.Format
+	}
+	if edit.Notify != nil {
+		body["notify"] = *edit.Notify
 	}
 	if len(edit.Attachments) > 0 {
 		body["attachments"] = edit.Attachments

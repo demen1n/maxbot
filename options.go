@@ -6,6 +6,16 @@ type SendOptions struct {
 	Format      string
 	Attachments []Attachment
 	ReplyToMid  string // mid of message to reply to
+
+	// Notify controls whether chat members get a push notification for this
+	// message. nil uses the server default (true); for channels the API
+	// requires true (or the field omitted) -- posts are always notified.
+	Notify *bool
+
+	// DisableLinkPreview suppresses link preview generation for the message
+	// text. Only honored by Bot.Send (POST /messages) and Context.Respond
+	// (POST /answers); PUT /messages (Bot.Edit) has no such query parameter.
+	DisableLinkPreview bool
 }
 
 // CallbackResponse represents a response to a callback query.
@@ -31,12 +41,14 @@ type Attachment struct {
 // SendMessage represents an outgoing message request.
 // Exactly one of UserID or ChatID must be set.
 type SendMessage struct {
-	UserID      string       // recipient user ID (private chats)
-	ChatID      string       // recipient chat/channel ID
-	Text        string       `json:"text"`
-	Format      string       `json:"format,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	Link        *linkedRef   `json:"link,omitempty"`
+	UserID             string       // recipient user ID (private chats)
+	ChatID             string       // recipient chat/channel ID
+	Text               string       `json:"text"`
+	Format             string       `json:"format,omitempty"`
+	Attachments        []Attachment `json:"attachments,omitempty"`
+	Link               *linkedRef   `json:"link,omitempty"`
+	Notify             *bool        `json:"notify,omitempty"`
+	DisableLinkPreview bool         // sent as a query param, not a body field
 }
 
 // linkedRef is used to attach a reply/forward link to an outgoing message.
@@ -53,6 +65,7 @@ type EditMessage struct {
 	Format      string       `json:"format,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
 	Link        *linkedRef   `json:"link,omitempty"`
+	Notify      *bool        `json:"notify,omitempty"`
 }
 
 // buildSendOptions aggregates every recognized option (*SendOptions,
@@ -71,6 +84,10 @@ func buildSendOptions(opts []interface{}) *SendOptions {
 			if v.ReplyToMid != "" {
 				o.ReplyToMid = v.ReplyToMid
 			}
+			if v.Notify != nil {
+				o.Notify = v.Notify
+			}
+			o.DisableLinkPreview = v.DisableLinkPreview
 		case *ReplyMarkup:
 			if len(v.InlineKeyboard) > 0 {
 				o.Attachments = append(o.Attachments, Attachment{
