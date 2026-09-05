@@ -44,8 +44,8 @@ func TestSendableHonorsReplyToMid(t *testing.T) {
 	}
 }
 
-// C12: sticker/contact must be rejected client-side when combined with any
-// other attachment (per spec they MUST be the only attachment); file may
+// C12: sticker/contact/audio must be rejected client-side when combined with
+// any other attachment (per spec they MUST be the only attachment); file may
 // only be combined with a single inline_keyboard attachment.
 func TestExclusivityConstraints(t *testing.T) {
 	markup := &ReplyMarkup{}
@@ -57,6 +57,9 @@ func TestExclusivityConstraints(t *testing.T) {
 	}
 	if _, err := b.Send(&User{ID: 1}, &Contact{Name: "Bob"}, markup); err == nil {
 		t.Error("expected error combining contact with a keyboard")
+	}
+	if _, err := b.Send(&User{ID: 1}, &Audio{UploadedInfo: UploadedInfo{Token: "a"}}, markup); err == nil {
+		t.Error("expected error combining audio with a keyboard")
 	}
 	if _, err := b.Send(&User{ID: 1}, &Document{UploadedInfo: UploadedInfo{Token: "f"}}, markup); err != nil {
 		t.Errorf("expected file+inline_keyboard to be allowed, got %v", err)
