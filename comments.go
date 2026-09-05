@@ -68,11 +68,16 @@ func (b *Bot) GetComment(messageID, commentID string) (*CommentMessage, error) {
 // The bot must be a channel administrator with read_all_messages and write
 // permissions. format is optional ("markdown" or "html"); pass "" for plain text.
 func (b *Bot) PostComment(messageID, text, format string) (*CommentMessage, error) {
+	return b.PostCommentReply(messageID, text, format, "")
+}
+
+// PostCommentReply publishes a comment on a channel post as a reply to an
+// existing comment (NewCommentBody.link; comments only support link type
+// "reply", never "forward"). Pass replyToCommentMid = "" for a plain
+// top-level comment, equivalent to PostComment.
+func (b *Bot) PostCommentReply(messageID, text, format, replyToCommentMid string) (*CommentMessage, error) {
 	path := fmt.Sprintf("/messages/%s/comments", url.PathEscape(messageID))
-	payload := map[string]interface{}{"text": text}
-	if format != "" {
-		payload["format"] = format
-	}
+	payload := commentBody(text, format, replyToCommentMid)
 
 	data, err := b.Raw("POST", path, payload)
 	if err != nil {
@@ -89,9 +94,29 @@ func (b *Bot) PostComment(messageID, text, format string) (*CommentMessage, erro
 
 // EditComment updates the text of an existing comment.
 func (b *Bot) EditComment(messageID, commentID, text string) error {
+	return b.EditCommentReply(messageID, commentID, text, "")
+}
+
+// EditCommentReply updates an existing comment's text and its reply target
+// (NewCommentBody.link). Pass replyToCommentMid = "" to leave/clear it,
+// equivalent to EditComment.
+func (b *Bot) EditCommentReply(messageID, commentID, text, replyToCommentMid string) error {
 	path := fmt.Sprintf("/messages/%s/comments?comment_id=%s", url.PathEscape(messageID), url.QueryEscape(commentID))
-	payload := map[string]interface{}{"text": text}
+	payload := commentBody(text, "", replyToCommentMid)
 	return b.rawSimple("PUT", path, payload)
+}
+
+// commentBody builds a NewCommentBody payload (text/format/link) shared by
+// PostCommentReply and EditCommentReply.
+func commentBody(text, format, replyToCommentMid string) map[string]interface{} {
+	payload := map[string]interface{}{"text": text}
+	if format != "" {
+		payload["format"] = format
+	}
+	if replyToCommentMid != "" {
+		payload["link"] = &linkedRef{Type: "reply", Mid: replyToCommentMid}
+	}
+	return payload
 }
 
 // DeleteComment removes a comment from a channel post.

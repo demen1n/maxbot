@@ -113,6 +113,27 @@ func TestPostCommentUnwrapsEnvelope(t *testing.T) {
 	}
 }
 
+// C11: PostCommentReply must send a "reply" link so a comment can target
+// another comment, not just the post itself.
+func TestPostCommentReplyIncludesLink(t *testing.T) {
+	var gotBody map[string]interface{}
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": map[string]interface{}{"timestamp": 1, "body": map[string]interface{}{"mid": "mid.c2", "text": "reply"}},
+		})
+	}))
+
+	if _, err := b.PostCommentReply("mid.post1", "reply", "", "mid.c1"); err != nil {
+		t.Fatalf("PostCommentReply error: %v", err)
+	}
+	link, ok := gotBody["link"].(map[string]interface{})
+	if !ok || link["type"] != "reply" || link["mid"] != "mid.c1" {
+		t.Errorf("expected link={type:reply, mid:mid.c1}, got %+v", gotBody["link"])
+	}
+}
+
 func TestEditCommentQueryAndFailure(t *testing.T) {
 	var gotQuery string
 	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
