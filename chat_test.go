@@ -398,11 +398,36 @@ func TestInviteChatMembers(t *testing.T) {
 	defer srv.Close()
 
 	b, _ := NewBot(Settings{Token: "tok", URL: srv.URL, Poller: &LongPoller{}})
-	if err := b.InviteChatMembers(1, []int64{2, 3}); err != nil {
+	if _, err := b.InviteChatMembers(1, []int64{2, 3}); err != nil {
 		t.Fatalf("InviteChatMembers error: %v", err)
 	}
 	if len(gotBody.UserIDs) != 2 || gotBody.UserIDs[0] != 2 || gotBody.UserIDs[1] != 3 {
 		t.Errorf("unexpected user_ids: %v", gotBody.UserIDs)
+	}
+}
+
+// B6: a partial failure must be reported, not swallowed as full success.
+func TestInviteChatMembersPartialFailure(t *testing.T) {
+	b := newTestBot(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":         false,
+			"message":         "some users were not added",
+			"failed_user_ids": []int64{3},
+			"failed_user_details": []map[string]interface{}{
+				{"error_code": "add.participant.privacy", "user_ids": []int64{3}},
+			},
+		})
+	}))
+
+	result, err := b.InviteChatMembers(1, []int64{2, 3})
+	if err == nil {
+		t.Fatal("expected error for partial failure")
+	}
+	if result == nil || len(result.FailedUserIDs) != 1 || result.FailedUserIDs[0] != 3 {
+		t.Fatalf("expected FailedUserIDs=[3], got %+v", result)
+	}
+	if len(result.FailedUserDetails) != 1 || result.FailedUserDetails[0].ErrorCode != "add.participant.privacy" {
+		t.Errorf("unexpected FailedUserDetails: %+v", result.FailedUserDetails)
 	}
 }
 

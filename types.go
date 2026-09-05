@@ -417,6 +417,21 @@ type SimpleQueryResult struct {
 	Message string `json:"message,omitempty"`
 }
 
+// FailedUserDetails explains why a subset of users could not be added to a
+// group chat, as part of ModifyMembersResult.
+type FailedUserDetails struct {
+	ErrorCode string  `json:"error_code"`
+	UserIDs   []int64 `json:"user_ids"`
+}
+
+// ModifyMembersResult is the response from POST /chats/{chatId}/members: an
+// overall SimpleQueryResult plus, on partial failure, which users were not added.
+type ModifyMembersResult struct {
+	SimpleQueryResult
+	FailedUserIDs     []int64             `json:"failed_user_ids,omitempty"`
+	FailedUserDetails []FailedUserDetails `json:"failed_user_details,omitempty"`
+}
+
 // PhotoToken holds the token for a single uploaded photo.
 type PhotoToken struct {
 	Token string `json:"token"`

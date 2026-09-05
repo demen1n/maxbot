@@ -2,6 +2,7 @@ package maxbot
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -253,15 +254,27 @@ func (b *Bot) KickChatMember(chatID, userID int64, block bool) error {
 	return b.rawSimple("DELETE", endpoint, nil)
 }
 
-// InviteChatMembers adds users to the chat.
-func (b *Bot) InviteChatMembers(chatID int64, userIDs []int64) error {
+// InviteChatMembers adds users to the chat. The result reports success as a
+// whole and, if MAX could add only some of userIDs, which ones failed and
+// why -- a bare error would look like full success or full failure.
+func (b *Bot) InviteChatMembers(chatID int64, userIDs []int64) (*ModifyMembersResult, error) {
 	url := fmt.Sprintf("/chats/%d/members", chatID)
 	payload := map[string]interface{}{
 		"user_ids": userIDs,
 	}
 
-	_, err := b.Raw("POST", url, payload)
-	return err
+	data, err := b.Raw("POST", url, payload)
+	if err != nil {
+		return nil, err
+	}
+	var result ModifyMembersResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	if !result.Success {
+		return &result, errors.New(result.Message)
+	}
+	return &result, nil
 }
 
 // LeaveChat makes the bot leave the chat.
