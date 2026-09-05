@@ -107,9 +107,11 @@ func (b *Bot) EditCommentReply(messageID, commentID, text, replyToCommentMid str
 }
 
 // commentBody builds a NewCommentBody payload (text/format/link) shared by
-// PostCommentReply and EditCommentReply.
+// PostCommentReply and EditCommentReply. NewCommentBody.link is required
+// (nullable) per spec, so the key is always present -- nil when there's no
+// reply target -- mirroring how sendMessage always sends attachments/link.
 func commentBody(text, format, replyToCommentMid string) map[string]interface{} {
-	payload := map[string]interface{}{"text": text}
+	payload := map[string]interface{}{"text": text, "link": nil}
 	if format != "" {
 		payload["format"] = format
 	}
