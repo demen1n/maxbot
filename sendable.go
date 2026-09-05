@@ -1,9 +1,31 @@
 package maxbot
 
+import "fmt"
+
+// exclusivity constrains which extra attachments sendAttachment permits
+// alongside the primary one, per spec constraints on certain attachment types.
+type exclusivity int
+
+const (
+	// exclusivityNone allows any combination (image, video, audio, location, share).
+	exclusivityNone exclusivity = iota
+	// exclusivitySolo requires the attachment to be the only one in the
+	// message (sticker, contact) -- not even a keyboard.
+	exclusivitySolo
+	// exclusivityKeyboardOnly allows exactly one inline_keyboard attachment
+	// alongside (file: "можно отправить только в комбинации с вложением с
+	// кнопками").
+	exclusivityKeyboardOnly
+)
+
 // sendAttachment builds and sends a single-attachment message, applying
 // Text/Format/ReplyToMid and any extra attachments (e.g. a keyboard) from
 // opts. Shared by every Sendable implementation below.
-func (b *Bot) sendAttachment(to Recipient, attachment Attachment, opts *SendOptions) (*Message, error) {
+func (b *Bot) sendAttachment(to Recipient, attachment Attachment, opts *SendOptions, excl exclusivity) (*Message, error) {
+	if err := checkExclusivity(attachment.Type, opts, excl); err != nil {
+		return nil, err
+	}
+
 	msg := newSendMessage(to)
 	msg.Attachments = []Attachment{attachment}
 
@@ -19,6 +41,21 @@ func (b *Bot) sendAttachment(to Recipient, attachment Attachment, opts *SendOpti
 	}
 
 	return b.sendMessage(msg)
+}
+
+func checkExclusivity(attachmentType string, opts *SendOptions, excl exclusivity) error {
+	if opts == nil || len(opts.Attachments) == 0 {
+		return nil
+	}
+	switch excl {
+	case exclusivitySolo:
+		return fmt.Errorf("maxbot: %q must be the only attachment in the message, got %d extra", attachmentType, len(opts.Attachments))
+	case exclusivityKeyboardOnly:
+		if len(opts.Attachments) > 1 || opts.Attachments[0].Type != "inline_keyboard" {
+			return fmt.Errorf("maxbot: %q can only be combined with a single inline_keyboard attachment", attachmentType)
+		}
+	}
+	return nil
 }
 
 // Photo represents an image to send, via one of three mutually exclusive
@@ -54,7 +91,7 @@ func (p *Photo) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	default:
 		payload["photos"] = p.Photos
 	}
-	return b.sendAttachment(to, Attachment{Type: "image", Payload: payload}, opts)
+	return b.sendAttachment(to, Attachment{Type: "image", Payload: payload}, opts, exclusivityNone)
 }
 
 // Video represents an uploaded video ready to send.
@@ -68,7 +105,7 @@ func (v *Video) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	return b.sendAttachment(to, Attachment{
 		Type:    "video",
 		Payload: map[string]interface{}{"token": v.Token},
-	}, opts)
+	}, opts, exclusivityNone)
 }
 
 // Audio represents an uploaded audio file ready to send.
@@ -82,7 +119,7 @@ func (a *Audio) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	return b.sendAttachment(to, Attachment{
 		Type:    "audio",
 		Payload: map[string]interface{}{"token": a.Token},
-	}, opts)
+	}, opts, exclusivityNone)
 }
 
 // Document represents an uploaded file ready to send.
@@ -96,7 +133,7 @@ func (d *Document) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, erro
 	return b.sendAttachment(to, Attachment{
 		Type:    "file",
 		Payload: map[string]interface{}{"token": d.Token},
-	}, opts)
+	}, opts, exclusivityKeyboardOnly)
 }
 
 // Sticker represents a sticker to send, identified by its code.
@@ -110,7 +147,7 @@ func (s *Sticker) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error
 	return b.sendAttachment(to, Attachment{
 		Type:    "sticker",
 		Payload: map[string]interface{}{"code": s.Code},
-	}, opts)
+	}, opts, exclusivitySolo)
 }
 
 // Contact represents a contact card to send.
@@ -134,7 +171,7 @@ func (c *Contact) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error
 	if c.VCFPhone != "" {
 		payload["vcf_phone"] = c.VCFPhone
 	}
-	return b.sendAttachment(to, Attachment{Type: "contact", Payload: payload}, opts)
+	return b.sendAttachment(to, Attachment{Type: "contact", Payload: payload}, opts, exclusivitySolo)
 }
 
 // Location represents a geographic point to send.
@@ -147,7 +184,7 @@ type Location struct {
 // Per spec latitude/longitude are top-level attachment fields, not payload.
 func (l *Location) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) {
 	lat, lon := l.Latitude, l.Longitude
-	return b.sendAttachment(to, Attachment{Type: "location", Latitude: &lat, Longitude: &lon}, opts)
+	return b.sendAttachment(to, Attachment{Type: "location", Latitude: &lat, Longitude: &lon}, opts, exclusivityNone)
 }
 
 // Share attaches a media preview of an external URL to a message.
@@ -160,5 +197,5 @@ func (s *Share) Send(b *Bot, to Recipient, opts *SendOptions) (*Message, error) 
 	return b.sendAttachment(to, Attachment{
 		Type:    "share",
 		Payload: map[string]interface{}{"url": s.URL},
-	}, opts)
+	}, opts, exclusivityNone)
 }

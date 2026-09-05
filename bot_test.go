@@ -30,13 +30,15 @@ func TestSendableHonorsReplyKeyboard(t *testing.T) {
 	kb := &ReplyKeyboard{}
 	kb.Row(kb.Message("Hi", "hi"))
 
-	if _, err := b.Send(&User{ID: 1}, &Sticker{Code: "smile"}, kb); err != nil {
+	// Video (unlike Sticker/Contact) has no single-attachment constraint, so
+	// it can be combined with a keyboard.
+	if _, err := b.Send(&User{ID: 1}, &Video{UploadedInfo: UploadedInfo{Token: "vid-tok"}}, kb); err != nil {
 		t.Fatalf("Send error: %v", err)
 	}
 	if len(*got) != 2 {
-		t.Fatalf("expected sticker + reply_keyboard attachments, got %+v", *got)
+		t.Fatalf("expected video + reply_keyboard attachments, got %+v", *got)
 	}
-	if (*got)[0].Type != "sticker" || (*got)[1].Type != "reply_keyboard" {
+	if (*got)[0].Type != "video" || (*got)[1].Type != "reply_keyboard" {
 		t.Fatalf("unexpected attachment types: %+v", *got)
 	}
 }

@@ -44,6 +44,30 @@ func TestSendableHonorsReplyToMid(t *testing.T) {
 	}
 }
 
+// C12: sticker/contact must be rejected client-side when combined with any
+// other attachment (per spec they MUST be the only attachment); file may
+// only be combined with a single inline_keyboard attachment.
+func TestExclusivityConstraints(t *testing.T) {
+	markup := &ReplyMarkup{}
+	markup.Row(markup.Data("Yes", "yes"))
+
+	b, _ := captureAttachments(t)
+	if _, err := b.Send(&User{ID: 1}, &Sticker{Code: "smile"}, markup); err == nil {
+		t.Error("expected error combining sticker with a keyboard")
+	}
+	if _, err := b.Send(&User{ID: 1}, &Contact{Name: "Bob"}, markup); err == nil {
+		t.Error("expected error combining contact with a keyboard")
+	}
+	if _, err := b.Send(&User{ID: 1}, &Document{UploadedInfo: UploadedInfo{Token: "f"}}, markup); err != nil {
+		t.Errorf("expected file+inline_keyboard to be allowed, got %v", err)
+	}
+	if _, err := b.Send(&User{ID: 1}, &Document{UploadedInfo: UploadedInfo{Token: "f"}}, &SendOptions{
+		Attachments: []Attachment{{Type: "image", Payload: map[string]interface{}{"token": "x"}}},
+	}); err == nil {
+		t.Error("expected error combining file with a non-keyboard attachment")
+	}
+}
+
 func TestPhotoSendPayload(t *testing.T) {
 	b, got := captureAttachments(t)
 	p := &Photo{PhotoTokens: PhotoTokens{Photos: map[string]PhotoToken{"0": {Token: "photo-tok"}}}}
