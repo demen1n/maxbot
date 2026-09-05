@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -287,6 +288,23 @@ func TestProcessUpdateDispatchesAndReportsErrors(t *testing.T) {
 func TestProcessUpdateNoHandlerDoesNotPanic(t *testing.T) {
 	b := makeBot(t)
 	b.ProcessUpdate(Update{Message: &Message{Body: &MessageBody{Text: "hi"}}})
+}
+
+func TestProcessUpdateRecoversHandlerPanic(t *testing.T) {
+	b := makeBot(t)
+	var gotErr error
+	b.onError = func(err error, c Context) { gotErr = err }
+
+	b.Handle(OnText, func(Context) error { panic("boom") })
+
+	b.ProcessUpdate(Update{Message: &Message{Body: &MessageBody{Text: "hi"}}})
+
+	if gotErr == nil {
+		t.Fatal("expected onError to receive a converted panic error")
+	}
+	if !strings.Contains(gotErr.Error(), "boom") {
+		t.Errorf("expected error to mention panic value, got %v", gotErr)
+	}
 }
 
 // fakePoller lets TestStartStop exercise Bot.Start/Stop's lifecycle without
